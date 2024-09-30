@@ -1,1 +1,1 @@
-# Collect-EF-Portal-Logs-
+# Collect-EF-Portal-Logs
