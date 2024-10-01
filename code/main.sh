@@ -5,7 +5,8 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 temp_dir="tmp/"
-compressed_file_name="efp_logs_collection.tar.gz"
+hostname_parsed=$(echo ${HOSTNAME// /_})
+compressed_file_name="efp_logs_collection_${hostname_parsed}.tar.gz"
 ubuntu_distro="false"
 ubuntu_version=""
 ubuntu_major_version=""
