@@ -421,7 +421,7 @@ getOsData()
     fi
 
     target_dir="${temp_dir}/journal_log"
-    sudo journalctl -n 5000 > ${target_dir}/journal_last_5000_lines.log 2>&1
+    sudo journalctl -n 20000 > ${target_dir}/journal_last_20000_lines.log 2>&1
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
 }
