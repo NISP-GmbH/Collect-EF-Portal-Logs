@@ -38,6 +38,7 @@ main()
     getSssdData
     getNsswitchData
     getPamData
+    getEtcAuthSelect
     getJavaInfo
     getEfpData
     compressLogCollection

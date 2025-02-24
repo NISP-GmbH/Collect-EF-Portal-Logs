@@ -144,7 +144,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -264,6 +264,17 @@ getKerberosData()
     fi
 }
 
+getEtcAuthSelect()
+{
+    if [ -d /etc/authselect ]
+    then
+        echo "Collecting /etc/authselect info..."
+        target_dir="${temp_dir}/authselect_conf/"
+    
+        sudo cp -a /etc/authselect $target_dir
+    fi
+}
+
 getSssdData()
 {
     echo "Collecting all SSSD relevant info..."
@@ -273,6 +284,9 @@ getSssdData()
     then
         sudo cp -r /etc/sssd ${target_dir} > /dev/null 2>&1
     fi
+
+    sssd_config_file=$(find ${temp_dir}/sssd_conf/ -iname sssd.conf)
+    sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
 
     detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
     if [[ "${detect_sssd}x" != "x" ]]
@@ -344,6 +358,21 @@ getOsData()
         sudo getenforce > $target_dir/getenforce_result 2>&1
     fi
 
+    if command -v uptime > /dev/null 2>&1
+    then
+        sudo uptime > $target_dir/uptime 2>&1
+    fi
+
+    if command -v free > /dev/null 2>&1
+    then
+        sudo free -h > $target_dir/free_-h 2>&1
+    fi
+
+    if command -v df > /dev/null 2>&1
+    then
+        sudo df -h > $target_dir/df_-h 2>&1
+    fi
+
     if [ -f /etc/issue ]
     then
         sudo cp /etc/issue $target_dir > /dev/null 2>&1
@@ -405,9 +434,12 @@ getOsData()
     fi
 
     target_dir="${temp_dir}/journal_log"
-    sudo journalctl -n 20000 > ${target_dir}/journal_last_20000_lines.log 2>&1
+    sudo journalctl -n 50000 > ${target_dir}/journal_last_50000_lines.log 2>&1
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
+    sudo journalctl --no-page | grep -i "failed to allocate" > ${target_dir}/failed_to_allocate_messages
+    sudo journalctl --no-page | grep -i "fail" > ${target_dir}/fail_messages
+    sudo journalctl --no-page | grep -i "erro" > ${target_dir}/error_messages
 }
 
 getEfpData()
@@ -430,6 +462,7 @@ getEfpData()
         done
     fi
 
+
     target_dir="${temp_dir}/efp_log/"
 
     if [ -d /opt/nisp/enginframe/logs ]
@@ -441,6 +474,22 @@ getEfpData()
     then
         sudo cp -r /opt/nisp/enginframe/install ${target_dir}/install_log
     fi
+
+    efportal_install_config=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*\.config 2>/dev/null | head -1)
+    if [ -f $efportal_install_config ]
+    then
+        cat $efportal_install_config | egrep -i "pam.user" >> $target_dir/pam_user
+    fi
+
+    efportal_install_log=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*.log 2>/dev/null | head -1)
+    if [ -f $efportal_install_log ]
+    then
+        cat $efportal_install_log | egrep -i "no such file" >> $target_dir/efp_installer_log_no_such_file
+        cat $efportal_install_log | egrep -i "erro" >> $target_dir/efp_installer_log_erro_messages
+        cat $efportal_install_log | egrep -i "fail" >> $target_dir/efp_installer_log_fail_messages
+        cat $efportal_install_log | egrep -i "exit" >> $target_dir/efp_installer_log_exit_messages
+    fi
+
 
     find /opt/nisp/ -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
     do
@@ -470,7 +519,7 @@ getEfpData()
         then
             sudo cp -r "$dir/server-log" "${target_dir}/sessions/$tmp_dir/"
         fi
-done
+    done
 }
 
 getJavaInfo()
