@@ -490,20 +490,25 @@ getEfpData()
     fi
 
     efportal_install_config=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*\.config 2>/dev/null | head -1)
-    if [ -f $efportal_install_config ]
-    then
-        cat $efportal_install_config | egrep -i "pam.user" >> $target_dir/pam_user
-    fi
+	if [[ "${efportal_install_config}x" != "x" ]]
+	then
+	    if [ -f $efportal_install_config ]
+	    then
+	        cat $efportal_install_config | egrep -i "pam.user" >> $target_dir/pam_user
+	    fi
+	fi
 
     efportal_install_log=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*.log 2>/dev/null | head -1)
-    if [ -f $efportal_install_log ]
-    then
-        cat $efportal_install_log | egrep -i "no such file" >> $target_dir/efp_installer_log_no_such_file
-        cat $efportal_install_log | egrep -i "erro" >> $target_dir/efp_installer_log_erro_messages
-        cat $efportal_install_log | egrep -i "fail" >> $target_dir/efp_installer_log_fail_messages
-        cat $efportal_install_log | egrep -i "exit" >> $target_dir/efp_installer_log_exit_messages
-    fi
-
+	if [[ "${efportal_install_log}x" != "x" ]]
+	then
+	    if [ -f $efportal_install_log ]
+	    then
+	        cat $efportal_install_log | egrep -i "no such file" >> $target_dir/efp_installer_log_no_such_file
+	        cat $efportal_install_log | egrep -i "erro" >> $target_dir/efp_installer_log_erro_messages
+	        cat $efportal_install_log | egrep -i "fail" >> $target_dir/efp_installer_log_fail_messages
+	        cat $efportal_install_log | egrep -i "exit" >> $target_dir/efp_installer_log_exit_messages
+	    fi
+	fi
 
     find ${ef_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
     do
