@@ -482,10 +482,13 @@ getEfpData()
 
     if [ -d ${ef_dir}/enginframe/ ]
     then
-        for efp_version in $(ls ${ef_dir}/enginframe/ | egrep -i "202[0-9]{1}")
+        for efp_version in $(ls ${ef_dir}/enginframe/ | egrep -i "202[0-9]{1}" )
         do
-            mkdir -p ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
-            sudo cp -r ${ef_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+			if [ -d "${ef_dir}/enginframe/${efp_version}" ]
+			then
+            	mkdir -p ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+            	sudo cp -r ${ef_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+			fi
         done
     fi
 
