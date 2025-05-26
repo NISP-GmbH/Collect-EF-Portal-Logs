@@ -7,6 +7,13 @@ NC='\033[0m' # No Color
 temp_dir="tmp/"
 hostname_parsed=$(echo ${HOSTNAME// /_})
 compressed_file_name="efp_logs_collection_${hostname_parsed}.tar.gz"
+encrypt_length="32"
+encrypt_password=$(openssl rand -base64 48 | tr -dc '\-A-Za-z0-9@#$%^&*()_=+' | tr -d ' ' | head -c "${encrypt_length}")
+encrypted_file_name="${compressed_file_name}.gpg"
+upload_domain="https://dcv-logs.ni-sp.com"
+upload_url="${upload_domain}/upload.php"
+notify_url="${upload_domain}/notify.php"
+curl_response=""
 ubuntu_distro="false"
 ubuntu_version=""
 ubuntu_major_version=""
@@ -45,7 +52,8 @@ main()
     getJavaInfo
     getEfpData
     compressLogCollection
-    askToEncrypt
+    encryptLogCollection
+    uploadLogCollection
     removeTempDirs
     exit 0
 }

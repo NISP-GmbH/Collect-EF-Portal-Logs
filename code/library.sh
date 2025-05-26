@@ -2,9 +2,40 @@ welcomeMessage()
 {
     echo "This script will collect important logs to help you to find eventual issues with your configuration."
     echo -e "${GREEN}By default the script will not restart any service without your approval. So if you do not agree when asked, this script will collect all logs without touch in any running service.${NC}"
-    echo "Answering yes to those answers can help the support to troubleshoot the problem."
     echo "To start collecting the logs, press enter or ctrl+c to quit."
     read p
+}
+
+uploadLogCollection()
+{
+    echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
+
+    echo -e "${GREEN}Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc.${NC}"
+    read identifier_string
+
+    curl_response=$(curl -s -w "\n%{http_code}" -F "file=@${encrypted_file_name}" "${upload_url}")
+    if [ $? -ne 0 ]
+    then
+        echo "Failed to upload the file!"
+        exit 23
+    else
+        echo -e "\nUpload successful!"
+        curl_http_body=$(echo $curl_response | cut -d' ' -f1)
+        curl_http_status=$(echo $curl_response | cut -d' ' -f2)
+        curl_filename=$(echo "$curl_http_body" | tr -d '\r\n')
+        curl_response=$(curl -s -w "\n%{http_code}" -X POST --data-urlencode "encrypt_password=${encrypt_password}" --data-urlencode "curl_filename=${curl_filename}" --data-urlencode "identifier_string=${identifier_string}" "$notify_url")
+        if [ $? -ne 0 ]
+        then
+            echo "Failed to notificate the NISP Support Team about the uploaded file. Please send an e-mail."
+        else
+            echo -e "${GREEN}NISP Support Team was notified about the file!${NC}"
+        fi
+    fi
+}
+
+encryptLogCollection()
+{
+    gpg --symmetric --cipher-algo AES256 --batch --yes --passphrase "${encrypt_password}" --output "${encrypted_file_name}"  "${compressed_file_name}"
 }
 
 checkEfDir()
@@ -297,7 +328,10 @@ getSssdData()
     fi
 
     sssd_config_file=$(find ${temp_dir}/sssd_conf/ -iname sssd.conf)
-    sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+	if [[ "${sssd_config_file}x" != "x" ]]
+	then
+    	sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+	fi
 
     detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
     if [[ "${detect_sssd}x" != "x" ]]
