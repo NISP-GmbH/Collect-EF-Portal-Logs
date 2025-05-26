@@ -14,6 +14,8 @@ ubuntu_minor_version=""
 redhat_distro_based="false"
 redhat_distro_based_version=""
 force_flag="false"
+ef_dir="/opt/nisp"
+ef_dir_basename=$(basename ${ef_dir})
 
 for arg in "$@"
 do
@@ -27,6 +29,7 @@ done
 main()
 {
     welcomeMessage
+	checkEfDir
     checkLinuxDistro
     checkRequirements
     createTempDirs

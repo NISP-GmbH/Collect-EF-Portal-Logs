@@ -23,6 +23,17 @@ welcomeMessage()
     read p
 }
 
+checkEfDir()
+{
+	if [ -d /opt/nisp ]
+	then
+		ef_dir="/opt/nisp"
+	else
+		ef_dir="/opt/nice"
+	fi
+	
+}
+
 askToEncrypt()
 {
     echo -e "${GREEN}The file >>> $compressed_file_name <<< was created and is ready to send to support.${NC}"
@@ -111,11 +122,11 @@ checkLinuxDistro()
 
 checkRequirements()
 {
-    if [ -d /opt/nisp ]
+    if [ -d $ef_dir ]
     then
         checkPackages
     else
-        echo "Directory >>> /opt/nisp <<< does not exist. Exiting..."
+        echo "Directory >>> $ef_dir <<< does not exist. Exiting..."
         exit 25
     fi
 }
@@ -160,7 +171,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -280,6 +291,17 @@ getKerberosData()
     fi
 }
 
+getEtcAuthSelect()
+{
+    if [ -d /etc/authselect ]
+    then
+        echo "Collecting /etc/authselect info..."
+        target_dir="${temp_dir}/authselect_conf/"
+    
+        sudo cp -a /etc/authselect $target_dir
+    fi
+}
+
 getSssdData()
 {
     echo "Collecting all SSSD relevant info..."
@@ -289,6 +311,9 @@ getSssdData()
     then
         sudo cp -r /etc/sssd ${target_dir} > /dev/null 2>&1
     fi
+
+    sssd_config_file=$(find ${temp_dir}/sssd_conf/ -iname sssd.conf)
+    sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
 
     detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
     if [[ "${detect_sssd}x" != "x" ]]
@@ -360,6 +385,21 @@ getOsData()
         sudo getenforce > $target_dir/getenforce_result 2>&1
     fi
 
+    if command -v uptime > /dev/null 2>&1
+    then
+        sudo uptime > $target_dir/uptime 2>&1
+    fi
+
+    if command -v free > /dev/null 2>&1
+    then
+        sudo free -h > $target_dir/free_-h 2>&1
+    fi
+
+    if command -v df > /dev/null 2>&1
+    then
+        sudo df -h > $target_dir/df_-h 2>&1
+    fi
+
     if [ -f /etc/issue ]
     then
         sudo cp /etc/issue $target_dir > /dev/null 2>&1
@@ -421,9 +461,12 @@ getOsData()
     fi
 
     target_dir="${temp_dir}/journal_log"
-    sudo journalctl -n 20000 > ${target_dir}/journal_last_20000_lines.log 2>&1
+    sudo journalctl -n 50000 > ${target_dir}/journal_last_50000_lines.log 2>&1
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
+    sudo journalctl --no-page | grep -i "failed to allocate" > ${target_dir}/failed_to_allocate_messages
+    sudo journalctl --no-page | grep -i "fail" > ${target_dir}/fail_messages
+    sudo journalctl --no-page | grep -i "erro" > ${target_dir}/error_messages
 }
 
 getEfpData()
@@ -431,34 +474,51 @@ getEfpData()
     echo "Collecting all EF Portal relevant data..."
     target_dir="${temp_dir}/efp_conf/"
 
-    if [ -d /opt/nisp/enginframe/conf/ ]
+    if [ -d ${ef_dir}/enginframe/conf/ ]
     then
-        mkdir -p ${target_dir}/opt/nisp/enginframe/
-        sudo cp -r /opt/nisp/enginframe/conf ${target_dir}/opt/nisp/enginframe/
+        mkdir -p ${target_dir}/opt/${ef_dir_basename}/enginframe/
+        sudo cp -r ${ef_dir}/enginframe/conf ${target_dir}/opt/${ef_dir_basename}/enginframe/
     fi
 
-    if [ -d /opt/nisp/enginframe/ ]
+    if [ -d ${ef_dir}/enginframe/ ]
     then
-        for efp_version in $(ls /opt/nisp/enginframe/ | egrep -i "202[0-9]{1}")
+        for efp_version in $(ls ${ef_dir}/enginframe/ | egrep -i "202[0-9]{1}")
         do
-            mkdir -p ${target_dir}/opt/nisp/enginframe/${efp_version}/enginframe/
-            sudo cp -r /opt/nisp/enginframe/${efp_version}/enginframe/conf ${target_dir}/opt/nisp/enginframe/${efp_version}/enginframe/
+            mkdir -p ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+            sudo cp -r ${ef_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
         done
     fi
 
+
     target_dir="${temp_dir}/efp_log/"
 
-    if [ -d /opt/nisp/enginframe/logs ]
+    if [ -d ${ef_dir}/enginframe/logs ]
     then
-        sudo cp -r /opt/nisp/enginframe/logs ${target_dir}/logs_main
+        sudo cp -r ${ef_dir}/enginframe/logs ${target_dir}/logs_main
     fi
 
-    if [ -d /opt/nisp/enginframe/install ]
+    if [ -d ${ef_dir}/enginframe/install ]
     then
-        sudo cp -r /opt/nisp/enginframe/install ${target_dir}/install_log
+        sudo cp -r ${ef_dir}/enginframe/install ${target_dir}/install_log
     fi
 
-    find /opt/nisp/ -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
+    efportal_install_config=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*\.config 2>/dev/null | head -1)
+    if [ -f $efportal_install_config ]
+    then
+        cat $efportal_install_config | egrep -i "pam.user" >> $target_dir/pam_user
+    fi
+
+    efportal_install_log=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*.log 2>/dev/null | head -1)
+    if [ -f $efportal_install_log ]
+    then
+        cat $efportal_install_log | egrep -i "no such file" >> $target_dir/efp_installer_log_no_such_file
+        cat $efportal_install_log | egrep -i "erro" >> $target_dir/efp_installer_log_erro_messages
+        cat $efportal_install_log | egrep -i "fail" >> $target_dir/efp_installer_log_fail_messages
+        cat $efportal_install_log | egrep -i "exit" >> $target_dir/efp_installer_log_exit_messages
+    fi
+
+
+    find ${ef_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
     do
         tmp_dir=$(basename "$dir")
         mkdir -p "${target_dir}/sessions/${tmp_dir}"
@@ -486,7 +546,7 @@ getEfpData()
         then
             sudo cp -r "$dir/server-log" "${target_dir}/sessions/$tmp_dir/"
         fi
-done
+    done
 }
 
 getJavaInfo()
@@ -510,7 +570,7 @@ getJavaInfo()
     fi
 
     echo "List of .jar found and respective md5sum" > ${target_dir}/jar_files_md5sum
-    find /opt/nisp -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
+    find ${ef_dir} -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
     do
         md5sum "$jar_file" &>> "${target_dir}/jar_files_md5sum"
     done
@@ -532,6 +592,8 @@ ubuntu_minor_version=""
 redhat_distro_based="false"
 redhat_distro_based_version=""
 force_flag="false"
+ef_dir="/opt/nisp"
+ef_dir_basename=$(basename ${ef_dir})
 
 for arg in "$@"
 do
@@ -545,6 +607,7 @@ done
 main()
 {
     welcomeMessage
+	checkEfDir
     checkLinuxDistro
     checkRequirements
     createTempDirs
@@ -556,6 +619,7 @@ main()
     getSssdData
     getNsswitchData
     getPamData
+    getEtcAuthSelect
     getJavaInfo
     getEfpData
     compressLogCollection
@@ -567,4 +631,5 @@ main()
 main
 
 # unknown error
+echo "Unknown error!"
 exit 255

@@ -7,6 +7,17 @@ welcomeMessage()
     read p
 }
 
+checkEfDir()
+{
+	if [ -d /opt/nisp ]
+	then
+		ef_dir="/opt/nisp"
+	else
+		ef_dir="/opt/nice"
+	fi
+	
+}
+
 askToEncrypt()
 {
     echo -e "${GREEN}The file >>> $compressed_file_name <<< was created and is ready to send to support.${NC}"
@@ -95,11 +106,11 @@ checkLinuxDistro()
 
 checkRequirements()
 {
-    if [ -d /opt/nisp ]
+    if [ -d $ef_dir ]
     then
         checkPackages
     else
-        echo "Directory >>> /opt/nisp <<< does not exist. Exiting..."
+        echo "Directory >>> $ef_dir <<< does not exist. Exiting..."
         exit 25
     fi
 }
@@ -447,32 +458,32 @@ getEfpData()
     echo "Collecting all EF Portal relevant data..."
     target_dir="${temp_dir}/efp_conf/"
 
-    if [ -d /opt/nisp/enginframe/conf/ ]
+    if [ -d ${ef_dir}/enginframe/conf/ ]
     then
-        mkdir -p ${target_dir}/opt/nisp/enginframe/
-        sudo cp -r /opt/nisp/enginframe/conf ${target_dir}/opt/nisp/enginframe/
+        mkdir -p ${target_dir}/opt/${ef_dir_basename}/enginframe/
+        sudo cp -r ${ef_dir}/enginframe/conf ${target_dir}/opt/${ef_dir_basename}/enginframe/
     fi
 
-    if [ -d /opt/nisp/enginframe/ ]
+    if [ -d ${ef_dir}/enginframe/ ]
     then
-        for efp_version in $(ls /opt/nisp/enginframe/ | egrep -i "202[0-9]{1}")
+        for efp_version in $(ls ${ef_dir}/enginframe/ | egrep -i "202[0-9]{1}")
         do
-            mkdir -p ${target_dir}/opt/nisp/enginframe/${efp_version}/enginframe/
-            sudo cp -r /opt/nisp/enginframe/${efp_version}/enginframe/conf ${target_dir}/opt/nisp/enginframe/${efp_version}/enginframe/
+            mkdir -p ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+            sudo cp -r ${ef_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
         done
     fi
 
 
     target_dir="${temp_dir}/efp_log/"
 
-    if [ -d /opt/nisp/enginframe/logs ]
+    if [ -d ${ef_dir}/enginframe/logs ]
     then
-        sudo cp -r /opt/nisp/enginframe/logs ${target_dir}/logs_main
+        sudo cp -r ${ef_dir}/enginframe/logs ${target_dir}/logs_main
     fi
 
-    if [ -d /opt/nisp/enginframe/install ]
+    if [ -d ${ef_dir}/enginframe/install ]
     then
-        sudo cp -r /opt/nisp/enginframe/install ${target_dir}/install_log
+        sudo cp -r ${ef_dir}/enginframe/install ${target_dir}/install_log
     fi
 
     efportal_install_config=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*\.config 2>/dev/null | head -1)
@@ -491,7 +502,7 @@ getEfpData()
     fi
 
 
-    find /opt/nisp/ -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
+    find ${ef_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
     do
         tmp_dir=$(basename "$dir")
         mkdir -p "${target_dir}/sessions/${tmp_dir}"
@@ -543,7 +554,7 @@ getJavaInfo()
     fi
 
     echo "List of .jar found and respective md5sum" > ${target_dir}/jar_files_md5sum
-    find /opt/nisp -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
+    find ${ef_dir} -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
     do
         md5sum "$jar_file" &>> "${target_dir}/jar_files_md5sum"
     done
