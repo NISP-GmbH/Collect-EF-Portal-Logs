@@ -1,3 +1,0 @@
-# unknown error
-echo "Unknown error!"
-exit 255
