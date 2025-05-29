@@ -21,16 +21,31 @@ ubuntu_minor_version=""
 redhat_distro_based="false"
 redhat_distro_based_version=""
 force_flag="false"
-ef_dir="/opt/nisp"
-ef_dir_basename=$(basename ${ef_dir})
+efp_dir="/opt/nisp"
+efp_dir_basename=$(basename ${ef_dir})
+efp_report_dir_path="efp_report"
+efp_report_txt_file_name="efp_report.txt"
+efp_report_html_file_name="efp_report.html"
+efp_report_txt_path="${ef_report_dir_path}/${ef_report_txt_file_name}"
+efp_report_html_path="${ef_report_dir_path}/${ef_report_html_file_name}"
+efp_report_separator="------------------------------------------------------------------"
+report_only="false"
+collect_log_only="false"
+option_selected="1"
 
 for arg in "$@"
 do
-    if [ "$arg" = "--force" ]
-    then
-        force_flag=true
-        break
-    fi
+    case $arg in
+        --force)
+            force_flag=true
+        ;;
+        --report-only)
+            report_only=true
+        ;;
+        --collect-logs)
+            collect_log_only=true
+        ;;
+    esac
 done
 
 main()
@@ -51,6 +66,7 @@ main()
     getEtcAuthSelect
     getJavaInfo
     getEfpData
+	doHtmlReport
     compressLogCollection
     encryptLogCollection
     uploadLogCollection
