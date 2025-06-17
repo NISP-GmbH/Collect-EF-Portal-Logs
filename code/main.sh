@@ -22,16 +22,17 @@ redhat_distro_based="false"
 redhat_distro_based_version=""
 force_flag="false"
 efp_dir="/opt/nisp"
-efp_dir_basename=$(basename ${ef_dir})
+efp_dir_basename=$(basename ${efp_dir})
 efp_report_dir_path="efp_report"
 efp_report_txt_file_name="efp_report.txt"
 efp_report_html_file_name="efp_report.html"
-efp_report_txt_path="${ef_report_dir_path}/${ef_report_txt_file_name}"
-efp_report_html_path="${ef_report_dir_path}/${ef_report_html_file_name}"
+efp_report_txt_path="${temp_dir}/${efp_report_dir_path}/${efp_report_txt_file_name}"
+efp_report_html_path="${temp_dir}/${efp_report_dir_path}/${efp_report_html_file_name}"
 efp_report_separator="------------------------------------------------------------------"
 report_only="false"
 collect_log_only="false"
 option_selected="1"
+SCRIPT_MARKER="NISPGMBHHASH$(date +%s)$$"
 
 for arg in "$@"
 do

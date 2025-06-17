@@ -37,7 +37,7 @@ safeLogCheck()
 
 doHtmlReport()
 {
-    cat << EOF >> ${efp_report_html_path}/html_head
+    cat << EOF >> ${efp_report_dir_path}/html_head
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -131,17 +131,17 @@ doHtmlReport()
     </header>
 EOF
 
-    cat << EOF >> ${efp_report_html_path}/html_tail
+    cat << EOF >> ${efp_report_dir_path}/html_tail
 </body>
 </html>
 EOF
 
-    cat ${efp_report_html_path}/html_head > $efp_report_html_path
-    cat ${efp_report_html_path}/html_critical >> $efp_report_html_path
-    cat ${efp_report_html_path}/html_warning >> $efp_report_html_path
-    cat ${efp_report_html_path}/html_info >> $efp_report_html_path
-    cat ${efp_report_html_path}/html_tail >> $efp_report_html_path
-    rm -f ${efp_report_html_path}/html_*
+    cat ${efp_report_dir_path}/html_head > $efp_report_html_path
+    cat ${efp_report_dir_path}/html_critical >> $efp_report_html_path
+    cat ${efp_report_dir_path}/html_warning >> $efp_report_html_path
+    cat ${efp_report_dir_path}/html_info >> $efp_report_html_path
+    cat ${efp_report_dir_path}/html_tail >> $efp_report_html_path
+    rm -f ${efp_report_dir_path}/html_*
 }
 
 command_exists()
@@ -825,10 +825,10 @@ getEfpData()
 	    fi
 	fi
 
-    find ${efp_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
+    find ${efp_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r found_dir
     do
-        tmp_dir=$(basename "$dir")
-        mkdir -p "${target_dir}/sessions/${tmp_dir}"
+        session_tmp_dir=$(basename "$found_dir")
+        mkdir -p "${target_dir}/sessions/${session_tmp_dir}"
     
         files_to_copy=(
             "env.log"
@@ -841,17 +841,17 @@ getEfpData()
             "shared-fs"
         )
     
-        for file in "${files_to_copy[@]}"
+        for file_name in "${files_to_copy[@]}"
         do
-            if [ -f "$dir/$file" ]
+            if [ -f "$found_dir/$file_name" ]
             then
-                sudo cp "$dir/$file" "${target_dir}/sessions/${tmp_dir}/"
+                sudo cp "$found_dir/$file_name" "${target_dir}/sessions/${session_tmp_dir}/"
             fi
         done
     
-        if [ -d "$dir/server-log" ]
+        if [ -d "$found_dir/server-log" ]
         then
-            sudo cp -r "$dir/server-log" "${target_dir}/sessions/$tmp_dir/"
+            sudo cp -r "$found_dir/server-log" "${target_dir}/sessions/$session_tmp_dir/"
         fi
     done
 
