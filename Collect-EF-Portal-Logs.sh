@@ -14,20 +14,314 @@
 # deriving from the use or misuse of this information.
 ################################################################################
 
+safeLogCheck()
+{
+    local pattern="$1"
+    local target="$2"
+
+    if [[ "$target" == *"*"* ]]
+    then
+        local dir_part=$(dirname "$target")
+        local file_pattern=$(basename "$target")
+        local matching_files=$(find "$dir_part" -maxdepth 1 -name "$file_pattern" -type f 2>/dev/null)
+
+        if [ -z "$matching_files" ]
+        then
+            return 1
+        fi
+
+        local results=$(echo "$matching_files" | xargs grep -iE "$pattern" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+    elif [ -f "$target" ]
+    then
+        local results=$(grep -iE "$pattern" "$target" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+
+    elif [ -d "$target" ]
+    then
+        local results=$(egrep -Ri "$pattern" "$target" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+    else
+        return 1
+    fi
+
+    [ -n "$results" ]
+}
+
+doHtmlReport()
+{
+    cat << EOF >> ${efp_report_dir_path}/html_head
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NISP Report: EF Portal</title>
+    <style>
+        :root {
+            --critical-color: red;
+            --info-color: green;
+            --warning-color: yellow;
+            --suggestion-color: cyan;
+        }
+        
+        body {
+            background-color: black;
+            color: white;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        h1 {
+            color: white;
+            font-weight: 500;
+            font-size: 1.75rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        header h1 {
+            font-size: 2.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 0.75rem;
+        }
+        
+        .report-section {
+            border-left: 4px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 0 0.5rem 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .critical {
+            color: var(--critical-color);
+            border-left-color: var(--critical-color);
+        }
+        
+        .warning {
+            color: var(--warning-color);
+            border-left-color: var(--warning-color);
+        }
+        
+        .info {
+            color: var(--info-color);
+            border-left-color: var(--info-color);
+        }
+        
+        .status-keyword {
+            font-weight: bold;
+        }
+
+        .suggestion {
+            color: var(--suggestion-color);
+            margin-top: 0.5rem;
+        }
+        
+        a {
+            color: var(--suggestion-color);
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .support-info {
+            margin: 1rem 0 2rem;
+        }
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>NISP DCV Server Report</h1>
+        <div class="support-info">
+            <p>If you need support:</p>
+            <p> <a href="https://www.ni-sp.com/support/" target="_blank">https://www.ni-sp.com/support/</a></p>
+        </div>
+    </header>
+EOF
+
+    cat << EOF >> ${efp_report_dir_path}/html_tail
+</body>
+</html>
+EOF
+
+    cat ${efp_report_dir_path}/html_head > $efp_report_html_path
+
+    for html_message_type in critical warning info
+    do
+        if [ -f ${efp_report_dir_path}/html_${html_message_type} ]
+        then
+            cat ${efp_report_dir_path}/html_${html_message_type} >> $efp_report_html_path
+        fi
+    done
+    cat ${efp_report_dir_path}/html_tail >> $efp_report_html_path
+    rm -f ${efp_report_dir_path}/html_*
+}
+
+command_exists()
+{
+    command -v "$1" &> /dev/null
+}
+
+byebyeMessage()
+{
+    echo -e "${GREEN}Thank you! ${NC}"
+}
+
+reportMessage()
+{
+    local message_type="$1"
+    local message_text="$2"
+    if [[ "$3" == "null" ]]
+    then
+        local log_file="${efp_report_txt_file_name}"
+    else
+        local log_file="${efp_report_txt_file_name} $3"
+    fi
+    local message_suggestion="$4"
+    local recommended_links="$5"
+
+    reportMessageWrite "${message_text}" "${log_file}" "${message_type}" "${message_suggestion}" "${recommended_links}"
+    reportMessageWriteHtml "${message_text}" "null" "${message_type}" "${message_suggestion}" "${recommended_links}"
+}
+
+reportMessageWriteHtml()
+{
+    local message_text="$1"
+    local log_file="$2"
+    local message_type=$3
+    local message_suggestion=$4
+    local recommended_links=$5
+
+    cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+    <div class="report-section ${message_type}">
+        <h1><span class="status-keyword ${message_type}">$(echo "${message_type}" | tr '[:lower:]' '[:upper:]'):</span> ${message_text}</h1>
+EOF
+
+    if [[ "${message_suggestion}" != "null" ]]
+    then
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+            <p class="suggestion"><strong>SUGGESTION:</strong> $message_suggestion</p>
+EOF
+    fi
+
+    if [[ "${recommended_links}" != "null" ]]
+    then
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+        <p class="suggestion"><strong>Recommended links:</strong></p>
+        <ul>
+EOF
+        for link_recommended in $recommended_links
+        do
+            cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+    <li><a href="${link_recommended}" target="_blank">${link_recommended}</a></li>
+EOF
+        done
+
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+        </ul>
+EOF
+    fi
+    cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+    </div>
+EOF
+}
+
+reportMessageWrite()
+{
+    local message_text="$1"
+    local log_file="$2"
+    local message_type=$3
+    local message_suggestion=$4
+    local recommended_links=$5
+
+
+    case $message_type in
+        critical)
+            echo -e "${efp_report_separator}" | tee -a $log_file  > /dev/null
+            echo -e "${RED}CRITICAL: ${message_text}${NC}" | tee -a $log_file
+        ;;
+        warning)
+            echo -e "${efp_report_separator}" | tee -a $log_file  > /dev/null
+            echo -e "${YELLOW}WARNING: ${message_text}${NC}" | tee -a $log_file
+        ;;
+        info)
+            echo -e "${efp_report_separator}" | tee -a $log_file  > /dev/null
+            echo -e "${GREEN}INFO: ${message_text}${NC}" | tee -a $log_file
+        ;;
+    esac
+
+    if [[ "${message_suggestion}" != "null" ]]
+    then
+        echo -e "${BLUE}SUGGESTION: ${message_suggestion}${NC}" | tee -a $log_file > /dev/null
+    fi
+
+    if [[ "${recommended_links}" != "null" ]]
+    then
+        echo -e "Recommended links:" | tee -a $log_file > /dev/null
+        for link_recommended in $recommended_links
+        do
+            echo "- $link_recommended" | tee -a $log_file > /dev/null
+        done
+    fi
+}
 welcomeMessage()
 {
     echo "This script will collect important logs to help you to find eventual issues with your configuration."
     echo -e "${GREEN}By default the script will not restart any service without your approval. So if you do not agree when asked, this script will collect all logs without touch in any running service.${NC}"
-    echo "To start collecting the logs, press enter or ctrl+c to quit."
-    read p
+
+    option_selected=""
+    if [[ "$collect_log_only" == "false" && "$report_only" == "false" ]]
+    then
+        echo -e "${GREEN}Select which option do you want to proceed:${NC}"
+        echo -e "${GREEN}(1)${NC} Create a report that will look for common issues"
+        echo -e "${GREEN}(2)${NC} Collect relevant logs to send to NISP Support Team"
+        echo -e "${GREEN}Please type 1 or 2:${NC}"
+        read option_selected
+
+        if ! echo $option_selected | egrep -iq "^(1|2)$"
+        then
+            echo "Option >> $option_selected << invalid. Exiting..."
+            exit 24
+        fi
+    elif [[ "$collect_log_only" == "true" && "$report_only" == "false" ]]
+    then
+        option_selected="2"
+    elif [[ "$collect_log_only" == "false" && "$report_only" == "true" ]]
+    then
+        option_selected="1"
+    else
+        # collect logs will always create the report
+        collect_log_only=true
+        report_only=false
+        option_selected="2"
+    fi
+
+    case $option_selected in
+        1)
+            echo -e "${GREEN}The report will be saved in the same directory of the script with the name >> $efp_report_file_name << and >> $efp_report_html_file_name <<.${NC}"
+            report_only="true"
+        ;;
+        2)
+            echo -e "${GREEN}In the end an encrypted file will be created, then it will be securely uploaded to NISP and a notification will be sent to NISP Support Team.${NC}"
+            echo "If you do not have internet acess when executing this script, you will have an option to store the file in the end."
+
+            echo "Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc."
+            read identifier_string
+        ;;
+    esac
 }
 
 uploadLogCollection()
 {
     echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
-
-    echo -e "${GREEN}Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc.${NC}"
-    read identifier_string
 
     curl_response=$(curl -s -w "\n%{http_code}" -F "file=@${encrypted_file_name}" "${upload_url}")
     if [ $? -ne 0 ]
@@ -58,22 +352,11 @@ checkEfDir()
 {
 	if [ -d /opt/nisp ]
 	then
-		ef_dir="/opt/nisp"
+		efp_dir="/opt/nisp"
 	else
-		ef_dir="/opt/nice"
+		efp_dir="/opt/nice"
 	fi
 	
-}
-
-askToEncrypt()
-{
-    echo -e "${GREEN}The file >>> $compressed_file_name <<< was created and is ready to send to support.${NC}"
-    echo "If you want to encrypt the file with password, please use this command:"
-    echo "gpg -c $compressed_file_name"
-    echo "And set a password to open the file. Then send the file to us and send the password in a secure way."
-    echo "To decrypt and extract, the command is:"
-    echo "gpg -d ${compressed_file_name}.gpg | tar xzvf -"
-    echo "Encrypting is not mandatory to send to the support."
 }
 
 checkLinuxDistro()
@@ -153,11 +436,11 @@ checkLinuxDistro()
 
 checkRequirements()
 {
-    if [ -d $ef_dir ]
+    if [ -d $efp_dir ]
     then
         checkPackages
     else
-        echo "Directory >>> $ef_dir <<< does not exist. Exiting..."
+        echo "Directory >>> $efp_dir <<< does not exist. Exiting..."
         exit 25
     fi
 }
@@ -202,7 +485,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -346,7 +629,10 @@ getSssdData()
     sssd_config_file=$(find ${temp_dir}/sssd_conf/ -iname sssd.conf)
 	if [[ "${sssd_config_file}x" != "x" ]]
 	then
-    	sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+        if [ -f ${sssd_config_file} ]
+        then
+        	sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+        fi
 	fi
 
     detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
@@ -398,6 +684,129 @@ getHwData()
     else
         echo "dmidecode not found" > ${target_dir}/not_found_dmidecode 
 
+    fi
+}
+
+getNetworkData()
+{
+    echo "Collecting all Network relevant data..."
+    target_dir="${temp_dir}/network_data/"
+
+    if command_exists netstat
+    then
+        echo "Using netstat..."
+        netstat -tulpn >> ${target_dir}/netstat_-tulpn
+    elif command_exists ss
+    then
+        echo "Using ss..."
+        ss -tulpn >> ${target_dir}/ss_-tulpn
+    elif command_exists lsof
+    then
+        echo "Using lsof..."
+        lsof -i -P -n | grep LISTEN >> ${target_dir}/lsof_-i_-P_-n
+    else
+        echo "None of the required commands (netstat, ss, lsof) are available."
+        echo "Falling back to /proc filesystem:"
+        echo "TCP ports:"
+        cat /proc/net/tcp 2>/dev/null >> ${target_dir}/proc_net_tcp
+        echo "UDP ports:"
+        cat /proc/net/udp 2>/dev/null ${target_dir}/proc_net_udp
+    fi
+
+    if command_exists dmesg
+    then
+        DMESG_ERRORS=$(sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)')
+
+        if [ -n "$DMESG_ERRORS" ]
+        then
+            reportMessage \
+            "warning" \
+            "Network errors were found in dmesg." \
+            "${temp_dir}/warnings/found_network_issues" \
+            "You need to troubleshoot what is wrong with your ethernet card or the network, because this can cause issues in the DCV traffic." \
+            "null"
+
+            sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
+        else
+            reportMessage \
+            "info" \
+            "Did not find network errors in the ethernet devices." \
+            "null" \
+            "null" \
+            "null"
+        fi
+    fi
+
+    dns_is_working="false"
+    if command_exists host
+    then
+        if ! host $dns_test_domain &>/dev/null
+        then
+            dns_is_working="false"
+        else
+                dns_is_working="true"
+        fi
+    elif command_exists dig
+    then
+        if ! dig +short $dns_test_domain  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    elif command_exists nslookup
+    then
+        if ! nslookup $dns_test_domain  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    elif command_exists getent
+    then
+        if ! getent hosts  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    fi
+
+    if $dns_is_working
+    then
+        reportMessage \
+        "info" \
+        "DNS resolution >> IS WORKING <<." \
+        "${target_dir}/dns_is_working" \
+        "DNS is important to validate your DCV license and to reach your RLM server, if you are using one." \
+        "null"
+    else
+        reportMessage \
+        "critical" \
+        "DNS resolution >> IS NOT WORKING <<." \
+        "${target_dir}/dns_is_NOT_working ${temp_dir}/warnings/dns_is_NOT_working" \
+        "You need to check your DHCP server and your /etc/resolv.conf to understand why your server can not solve DNS." \
+        "null"
+    fi
+
+    if command_exists ping
+    then
+        if ! ping -c 1 -W 3 $ip_test_external &>/dev/null
+        then
+            reportMessage \
+            "warning" \
+            "No external connectivity to ${ip_test_external}." \
+            "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
+            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the DCV server logs for possible network issues." \
+            "null"
+        else
+            reportMessage \
+            "info" \
+            "External connectivity to ${ip_test_external} was tested and is working." \
+            "${target_dir}/ping_to_${ip_test_external}_is_working" \
+            "null" \
+            "null"
+        fi
     fi
 }
 
@@ -508,20 +917,20 @@ getEfpData()
     echo "Collecting all EF Portal relevant data..."
     target_dir="${temp_dir}/efp_conf/"
 
-    if [ -d ${ef_dir}/enginframe/conf/ ]
+    if [ -d ${efp_dir}/enginframe/conf/ ]
     then
-        mkdir -p ${target_dir}/opt/${ef_dir_basename}/enginframe/
-        sudo cp -r ${ef_dir}/enginframe/conf ${target_dir}/opt/${ef_dir_basename}/enginframe/
+        mkdir -p ${target_dir}/opt/${efp_dir_basename}/enginframe/
+        sudo cp -r ${efp_dir}/enginframe/conf ${target_dir}/opt/${efp_dir_basename}/enginframe/
     fi
 
-    if [ -d ${ef_dir}/enginframe/ ]
+    if [ -d ${efp_dir}/enginframe/ ]
     then
-        for efp_version in $(ls ${ef_dir}/enginframe/ | egrep -i "202[0-9]{1}" )
+        for efp_version in $(ls ${efp_dir}/enginframe/ | egrep -i "202[0-9]{1}" )
         do
-			if [ -d "${ef_dir}/enginframe/${efp_version}" ]
+			if [ -d "${efp_dir}/enginframe/${efp_version}" ]
 			then
-            	mkdir -p ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
-            	sudo cp -r ${ef_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${ef_dir}/enginframe/${efp_version}/enginframe/
+            	mkdir -p ${target_dir}/${efp_dir}/enginframe/${efp_version}/enginframe/
+            	sudo cp -r ${efp_dir}/enginframe/${efp_version}/enginframe/conf ${target_dir}/${efp_dir}/enginframe/${efp_version}/enginframe/
 			fi
         done
     fi
@@ -529,14 +938,14 @@ getEfpData()
 
     target_dir="${temp_dir}/efp_log/"
 
-    if [ -d ${ef_dir}/enginframe/logs ]
+    if [ -d ${efp_dir}/enginframe/logs ]
     then
-        sudo cp -r ${ef_dir}/enginframe/logs ${target_dir}/logs_main
+        sudo cp -r ${efp_dir}/enginframe/logs ${target_dir}/logs_main
     fi
 
-    if [ -d ${ef_dir}/enginframe/install ]
+    if [ -d ${efp_dir}/enginframe/install ]
     then
-        sudo cp -r ${ef_dir}/enginframe/install ${target_dir}/install_log
+        sudo cp -r ${efp_dir}/enginframe/install ${target_dir}/install_log
     fi
 
     efportal_install_config=$(ls -t ${target_dir}/install_log/install/*/efinstall-efportal*\.config 2>/dev/null | head -1)
@@ -560,10 +969,10 @@ getEfpData()
 	    fi
 	fi
 
-    find ${ef_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r dir
+    find ${efp_dir} -type d -name "tmp[0-9][0-9][0-9][0-9][0-9]*.session.ef" | while read -r found_dir
     do
-        tmp_dir=$(basename "$dir")
-        mkdir -p "${target_dir}/sessions/${tmp_dir}"
+        session_tmp_dir=$(basename "$found_dir")
+        mkdir -p "${target_dir}/sessions/${session_tmp_dir}"
     
         files_to_copy=(
             "env.log"
@@ -576,19 +985,59 @@ getEfpData()
             "shared-fs"
         )
     
-        for file in "${files_to_copy[@]}"
+        for file_name in "${files_to_copy[@]}"
         do
-            if [ -f "$dir/$file" ]
+            if [ -f "$found_dir/$file_name" ]
             then
-                sudo cp "$dir/$file" "${target_dir}/sessions/${tmp_dir}/"
+                sudo cp "$found_dir/$file_name" "${target_dir}/sessions/${session_tmp_dir}/"
             fi
         done
     
-        if [ -d "$dir/server-log" ]
+        if [ -d "$found_dir/server-log" ]
         then
-            sudo cp -r "$dir/server-log" "${target_dir}/sessions/$tmp_dir/"
+            sudo cp -r "$found_dir/server-log" "${target_dir}/sessions/$session_tmp_dir/"
         fi
     done
+
+    string_pattern="Timeout while waiting for Xdcv process"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
+    
+        reportMessage \
+        "critical" \
+        "Identified some issue with Xdcv during DCV Session creation." \
+        "${temp_dir}/warnings/Xdcv_timeout" \
+        "Xdcv is not starting in a expected time. You need to check your DCV Server." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find Xdcv timeout issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="Unable to get host chart for cluster.*SMClient"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/SMClient_errors
+    
+        reportMessage \ 
+        "critical" \
+        "Identified a SMClient issue to connect into a cluster." \
+        "${temp_dir}/warnings/SMClient_errors" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SMClient issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
 }
 
 getJavaInfo()
@@ -606,13 +1055,13 @@ getJavaInfo()
             echo "JAVA_HOME seems to be empty; was executed by user >>> $USER <<<." > ${temp_dir}/warnings/java_home_not_recognized_by_user_${USER}
         fi
 
-        readlink -f $(which java) | sed "s:/bin/java::" &> $target_dir/java_bin_path
+        readlink -f $(which java) &> $target_dir/java_bin_path
     else
         echo "java command not found!" > ${temp_dir}/warnings/java_not_found
     fi
 
     echo "List of .jar found and respective md5sum" > ${target_dir}/jar_files_md5sum
-    find ${ef_dir} -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
+    find ${efp_dir} -type f -iname "*.jar" -print0 | while IFS= read -r -d '' jar_file
     do
         md5sum "$jar_file" &>> "${target_dir}/jar_files_md5sum"
     done
@@ -641,16 +1090,36 @@ ubuntu_minor_version=""
 redhat_distro_based="false"
 redhat_distro_based_version=""
 force_flag="false"
-ef_dir="/opt/nisp"
-ef_dir_basename=$(basename ${ef_dir})
+efp_dir="/opt/nisp"
+efp_dir_basename=$(basename ${efp_dir})
+efp_report_dir_name="efp_report"
+efp_report_dir_path="${temp_dir}/${efp_report_dir_name}"
+efp_report_txt_file_name="efp_report.txt"
+efp_report_html_file_name="efp_report.html"
+efp_report_txt_path="${efp_report_dir_path}/${efp_report_txt_file_name}"
+efp_report_html_path="${efp_report_dir_path}/${efp_report_html_file_name}"
+efp_report_separator="------------------------------------------------------------------"
+dns_test_domain="google.com"
+ip_test_external="8.8.8.8"
+dns_is_working="false"
+report_only="false"
+collect_log_only="false"
+option_selected="1"
+SCRIPT_MARKER="NISPGMBHHASH$(date +%s)$$"
 
 for arg in "$@"
 do
-    if [ "$arg" = "--force" ]
-    then
-        force_flag=true
-        break
-    fi
+    case $arg in
+        --force)
+            force_flag=true
+        ;;
+        --report-only)
+            report_only=true
+        ;;
+        --collect-logs)
+            collect_log_only=true
+        ;;
+    esac
 done
 
 main()
@@ -662,6 +1131,7 @@ main()
     createTempDirs
     checkPackagesVersions
     getOsData
+    getNetworkData
     getEnvironmentVars
     getHwData
     getKerberosData
@@ -671,6 +1141,7 @@ main()
     getEtcAuthSelect
     getJavaInfo
     getEfpData
+	doHtmlReport
     compressLogCollection
     encryptLogCollection
     uploadLogCollection
