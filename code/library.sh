@@ -469,7 +469,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name}
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -668,6 +668,129 @@ getHwData()
     else
         echo "dmidecode not found" > ${target_dir}/not_found_dmidecode 
 
+    fi
+}
+
+getNetworkData()
+{
+    echo "Collecting all Network relevant data..."
+    target_dir="${temp_dir}/network_data/"
+
+    if command_exists netstat
+    then
+        echo "Using netstat..."
+        netstat -tulpn >> ${target_dir}/netstat_-tulpn
+    elif command_exists ss
+    then
+        echo "Using ss..."
+        ss -tulpn >> ${target_dir}/ss_-tulpn
+    elif command_exists lsof
+    then
+        echo "Using lsof..."
+        lsof -i -P -n | grep LISTEN >> ${target_dir}/lsof_-i_-P_-n
+    else
+        echo "None of the required commands (netstat, ss, lsof) are available."
+        echo "Falling back to /proc filesystem:"
+        echo "TCP ports:"
+        cat /proc/net/tcp 2>/dev/null >> ${target_dir}/proc_net_tcp
+        echo "UDP ports:"
+        cat /proc/net/udp 2>/dev/null ${target_dir}/proc_net_udp
+    fi
+
+    if command_exists dmesg
+    then
+        DMESG_ERRORS=$(sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)')
+
+        if [ -n "$DMESG_ERRORS" ]
+        then
+            reportMessage \
+            "warning" \
+            "Network errors were found in dmesg." \
+            "${temp_dir}/warnings/found_network_issues" \
+            "You need to troubleshoot what is wrong with your ethernet card or the network, because this can cause issues in the DCV traffic." \
+            "null"
+
+            sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
+        else
+            reportMessage \
+            "info" \
+            "Did not find network errors in the ethernet devices." \
+            "null" \
+            "null" \
+            "null"
+        fi
+    fi
+
+    dns_is_working="false"
+    if command_exists host
+    then
+        if ! host $dns_test_domain &>/dev/null
+        then
+            dns_is_working="false"
+        else
+                dns_is_working="true"
+        fi
+    elif command_exists dig
+    then
+        if ! dig +short $dns_test_domain  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    elif command_exists nslookup
+    then
+        if ! nslookup $dns_test_domain  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    elif command_exists getent
+    then
+        if ! getent hosts  &>/dev/null
+        then
+            dns_is_working="false"
+        else
+            dns_is_working="true"
+        fi
+    fi
+
+    if $dns_is_working
+    then
+        reportMessage \
+        "info" \
+        "DNS resolution >> IS WORKING <<." \
+        "${target_dir}/dns_is_working" \
+        "DNS is important to validate your DCV license and to reach your RLM server, if you are using one." \
+        "null"
+    else
+        reportMessage \
+        "critical" \
+        "DNS resolution >> IS NOT WORKING <<." \
+        "${target_dir}/dns_is_NOT_working ${temp_dir}/warnings/dns_is_NOT_working" \
+        "You need to check your DHCP server and your /etc/resolv.conf to understand why your server can not solve DNS." \
+        "null"
+    fi
+
+    if command_exists ping
+    then
+        if ! ping -c 1 -W 3 $ip_test_external &>/dev/null
+        then
+            reportMessage \
+            "warning" \
+            "No external connectivity to ${ip_test_external}." \
+            "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
+            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the DCV server logs for possible network issues." \
+            "null"
+        else
+            reportMessage \
+            "info" \
+            "External connectivity to ${ip_test_external} was tested and is working." \
+            "${target_dir}/ping_to_${ip_test_external}_is_working" \
+            "null" \
+            "null"
+        fi
     fi
 }
 

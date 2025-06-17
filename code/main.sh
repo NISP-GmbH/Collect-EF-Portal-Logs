@@ -30,6 +30,9 @@ efp_report_html_file_name="efp_report.html"
 efp_report_txt_path="${efp_report_dir_path}/${efp_report_txt_file_name}"
 efp_report_html_path="${efp_report_dir_path}/${efp_report_html_file_name}"
 efp_report_separator="------------------------------------------------------------------"
+dns_test_domain="google.com"
+ip_test_external="8.8.8.8"
+dns_is_working="false"
 report_only="false"
 collect_log_only="false"
 option_selected="1"
@@ -59,6 +62,7 @@ main()
     createTempDirs
     checkPackagesVersions
     getOsData
+    getNetworkData
     getEnvironmentVars
     getHwData
     getKerberosData
