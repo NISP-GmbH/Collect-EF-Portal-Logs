@@ -914,7 +914,7 @@ getJavaInfo()
             echo "JAVA_HOME seems to be empty; was executed by user >>> $USER <<<." > ${temp_dir}/warnings/java_home_not_recognized_by_user_${USER}
         fi
 
-        readlink -f $(which java) | sed "s:/bin/java::" &> $target_dir/java_bin_path
+        readlink -f $(which java) &> $target_dir/java_bin_path
     else
         echo "java command not found!" > ${temp_dir}/warnings/java_not_found
     fi
