@@ -137,9 +137,14 @@ EOF
 EOF
 
     cat ${efp_report_dir_path}/html_head > $efp_report_html_path
-    cat ${efp_report_dir_path}/html_critical >> $efp_report_html_path
-    cat ${efp_report_dir_path}/html_warning >> $efp_report_html_path
-    cat ${efp_report_dir_path}/html_info >> $efp_report_html_path
+
+    for html_message_type in critical warning info
+    do
+        if [ -f ${efp_report_dir_path}/html_${html_message_type} ]
+        then
+            cat ${efp_report_dir_path}/html_${html_message_type} >> $efp_report_html_path
+        fi
+    done
     cat ${efp_report_dir_path}/html_tail >> $efp_report_html_path
     rm -f ${efp_report_dir_path}/html_*
 }
@@ -179,36 +184,36 @@ reportMessageWriteHtml()
     local message_suggestion=$4
     local recommended_links=$5
 
-    cat << EOF >> ${efp_report_html_path}/html_${message_type}
+    cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     <div class="report-section ${message_type}">
         <h1><span class="status-keyword ${message_type}">$(echo "${message_type}" | tr '[:lower:]' '[:upper:]'):</span> ${message_text}</h1>
 EOF
 
     if [[ "${message_suggestion}" != "null" ]]
     then
-        cat << EOF >> ${efp_report_html_path}/html_${message_type}
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
             <p class="suggestion"><strong>SUGGESTION:</strong> $message_suggestion</p>
 EOF
     fi
 
     if [[ "${recommended_links}" != "null" ]]
     then
-        cat << EOF >> ${efp_report_html_path}/html_${message_type}
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
         <p class="suggestion"><strong>Recommended links:</strong></p>
         <ul>
 EOF
         for link_recommended in $recommended_links
         do
-            cat << EOF >> ${efp_report_html_path}/html_${message_type}
+            cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     <li><a href="${link_recommended}" target="_blank">${link_recommended}</a></li>
 EOF
         done
 
-        cat << EOF >> ${efp_report_html_path}/html_${message_type}
+        cat << EOF >> ${efp_report_dir_path}/html_${message_type}
         </ul>
 EOF
     fi
-    cat << EOF >> ${efp_report_html_path}/html_${message_type}
+    cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     </div>
 EOF
 }
@@ -464,7 +469,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_path}
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name}
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
