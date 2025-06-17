@@ -1,3 +1,40 @@
+safeLogCheck()
+{
+    local pattern="$1"
+    local target="$2"
+
+    if [[ "$target" == *"*"* ]]
+    then
+        local dir_part=$(dirname "$target")
+        local file_pattern=$(basename "$target")
+        local matching_files=$(find "$dir_part" -maxdepth 1 -name "$file_pattern" -type f 2>/dev/null)
+
+        if [ -z "$matching_files" ]
+        then
+            return 1
+        fi
+
+        local results=$(echo "$matching_files" | xargs grep -iE "$pattern" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+    elif [ -f "$target" ]
+    then
+        local results=$(grep -iE "$pattern" "$target" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+
+    elif [ -d "$target" ]
+    then
+        local results=$(egrep -Ri "$pattern" "$target" 2>/dev/null | \
+                       grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
+                       grep -v "$(basename $0)")
+    else
+        return 1
+    fi
+
+    [ -n "$results" ]
+}
+
 doHtmlReport()
 {
     cat << EOF >> ${efp_report_html_path}/html_head
