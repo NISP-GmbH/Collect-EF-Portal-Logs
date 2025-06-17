@@ -855,9 +855,10 @@ getEfpData()
         fi
     done
 
-    if safeLogCheck "Timeout while waiting for Xdcv process" "${target_dir}"
+    string_pattern="Timeout while waiting for Xdcv process"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "Timeout while waiting for Xdcv process" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
     
         reportMessage \
         "critical" \
@@ -869,6 +870,26 @@ getEfpData()
         reportMessage \
         "info" \
         "Did not find Xdcv timeout issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="Unable to get host chart for cluster.*SMClient"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/SMClient_errors
+    
+        reportMessage \ 
+        "critical" \
+        "Identified a SMClient issue to connect into a cluster." \
+        "${temp_dir}/warnings/SMClient_errors" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SMClient issues events." \
         "null" \
         "null" \
         "null"
