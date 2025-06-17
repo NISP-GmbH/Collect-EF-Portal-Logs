@@ -611,7 +611,10 @@ getSssdData()
     sssd_config_file=$(find ${temp_dir}/sssd_conf/ -iname sssd.conf)
 	if [[ "${sssd_config_file}x" != "x" ]]
 	then
-    	sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+        if [ -f ${sssd_config_file} ]
+        then
+        	sudo sed -i 's/^[[:space:]]*ldap_default_authtok = .*/ldap_default_authtok = /' $sssd_config_file
+        fi
 	fi
 
     detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
