@@ -302,9 +302,6 @@ uploadLogCollection()
 {
     echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
 
-    echo -e "${GREEN}Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc.${NC}"
-    read identifier_string
-
     curl_response=$(curl -s -w "\n%{http_code}" -F "file=@${encrypted_file_name}" "${upload_url}")
     if [ $? -ne 0 ]
     then
