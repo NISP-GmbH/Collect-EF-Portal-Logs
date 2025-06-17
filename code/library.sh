@@ -854,6 +854,25 @@ getEfpData()
             sudo cp -r "$dir/server-log" "${target_dir}/sessions/$tmp_dir/"
         fi
     done
+
+    if safeLogCheck "Timeout while waiting for Xdcv process" "${target_dir}"
+    then
+        egrep -Ri "Timeout while waiting for Xdcv process" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
+    
+        reportMessage \
+        "critical" \
+        "Identified some issue with Xdcv during DCV Session creation." \
+        "${temp_dir}/warnings/Xdcv_timeout" \
+        "Xdcv is not starting in a expected time. You need to check your DCV Server." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find Xdcv timeout issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
 }
 
 getJavaInfo()
