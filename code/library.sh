@@ -464,7 +464,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_path}
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
