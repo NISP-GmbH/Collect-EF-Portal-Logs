@@ -1182,14 +1182,14 @@ getEfpData()
 
         reportMessage \
         "critical" \
-        "Identified issues to get a host list from a cluster." \
+        "An I/O error was encountered submitting your job." \
         "${temp_dir}/warnings/${warning_file_name}" \
-        "You need to check your cluster configuration and the connectivity with the cluster to identify and fix the issue." \
+        "Is not possible to use I/O resources due some issue that is happening with your OS or the remote filesystem used. Please check your ef.log logs to get more details." \
         "null"
     else
         reportMessage \
         "info" \
-        "Did not find issues events to get host list from a cluster." \
+        "Did not find I/O error issues events when submitting jobs." \
         "null" \
         "null" \
         "null"
