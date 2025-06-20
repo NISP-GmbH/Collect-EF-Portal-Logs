@@ -485,7 +485,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf sssd_log kerberos_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -645,6 +645,27 @@ getSssdData()
     if [ -f /var/log/sssd ]
     then
         sudo cp -r /var/log/sssd ${target_dir}> /dev/null 2>&1
+    fi
+
+    string_pattern="sssd.*error"
+    warning_file_name="sssd_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+    
+        reportMessage \ 
+        "critical" \
+        "Identified SSSD errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your SSSD logs to identify why error messages are happening. It can affect your authentication." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SSSD issues events." \
+        "null" \
+        "null" \
+        "null"
     fi
 }
 
@@ -908,8 +929,10 @@ getOsData()
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i "failed to allocate" > ${target_dir}/failed_to_allocate_messages
-    sudo journalctl --no-page | grep -i "fail" > ${target_dir}/fail_messages
-    sudo journalctl --no-page | grep -i "erro" > ${target_dir}/error_messages
+    sudo journalctl --no-page | grep -i -C 10 "fail" > ${target_dir}/fail_messages
+    sudo journalctl --no-page | grep -i -C 10 "erro" > ${target_dir}/error_messages
+    sudo journalctl --no-page | grep -i -C 10 "(timeout|timedout|timed out)" > ${target_dir}/timeout_messages
+    sudo journalctl --no-page | grep -i -C 10 "dcv" > ${target_dir}/dcv_messages
 }
 
 getEfpData()
@@ -1000,14 +1023,15 @@ getEfpData()
     done
 
     string_pattern="Timeout while waiting for Xdcv process"
+    warning_file_name="Xdcv_timeout"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
     
         reportMessage \
         "critical" \
         "Identified some issue with Xdcv during DCV Session creation." \
-        "${temp_dir}/warnings/Xdcv_timeout" \
+        "${temp_dir}/warnings/${warning_file_name}" \
         "Xdcv is not starting in a expected time. You need to check your DCV Server." \
         "null"
     else
@@ -1020,20 +1044,168 @@ getEfpData()
     fi
 
     string_pattern="Unable to get host chart for cluster.*SMClient"
+    warning_file_name="SMClient_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/SMClient_errors
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
     
-        reportMessage \ 
+        reportMessage \
         "critical" \
         "Identified a SMClient issue to connect into a cluster." \
-        "${temp_dir}/warnings/SMClient_errors" \
+        "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
         "null"
     else
         reportMessage \
         "info" \
         "Did not find SMClient issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="dcvsm.*Error during retrieval of host list for cluster"
+    warning_file_name="efp_dcvsm_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified an issue to connect into a DCV SM cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCV SM issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="SQL.*No current connection"
+    warning_file_name="efp_db_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified connection issues with the database." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your database service status if the service is working. Also test if the EF Portal can reach the database IP and port." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find database connection issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="error.*Failed to retrieve a valid token for user.*dcvsm"
+    warning_file_name="efp_dcvsm_cluster"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified failure to retrieve a valid token for DCV SM cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your DCV SM Cluster configuration and logs to identify why is not possible to retrieve a valid token." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCVM SM token issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="slurm.*jobs.*error"
+    warning_file_name="slurm_jobs_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified SLURM jobs errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your SLURM service to identify the root cause." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SLURM jobs issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="syntax error near unexpected token"
+    warning_file_name="efp_syntax_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified EF Portal scripts with syntax errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your published applicatons and customized files to identify from where the syntax error is coming." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find EF Portal scripts syntax issue events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="grid.*Unable to get host list for cluster"
+    warning_file_name="efp_unable_to_get_host_list_for_cluster"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified issues to get a host list from a cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "You need to check your cluster configuration and the connectivity with the cluster to identify and fix the issue." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find issues events to get host list from a cluster." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="An I/O error was encountered submitting your job"
+    warning_file_name="efp_io_error_while_submitting_job"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified issues to get a host list from a cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "You need to check your cluster configuration and the connectivity with the cluster to identify and fix the issue." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find issues events to get host list from a cluster." \
         "null" \
         "null" \
         "null"
