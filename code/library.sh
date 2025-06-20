@@ -469,7 +469,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf sssd_log kerberos_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -629,6 +629,26 @@ getSssdData()
     if [ -f /var/log/sssd ]
     then
         sudo cp -r /var/log/sssd ${target_dir}> /dev/null 2>&1
+    fi
+
+    string_pattern="sssd.*error"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/sssd_errors
+    
+        reportMessage \ 
+        "critical" \
+        "Identified SSSD errors." \
+        "${temp_dir}/warnings/sssd_errors" \
+        "Please check your SSSD logs to identify why error messages are happening. It can affect your authentication." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SSSD issues events." \
+        "null" \
+        "null" \
+        "null"
     fi
 }
 
@@ -1008,7 +1028,7 @@ getEfpData()
     then
         egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/SMClient_errors
     
-        reportMessage \ 
+        reportMessage \
         "critical" \
         "Identified a SMClient issue to connect into a cluster." \
         "${temp_dir}/warnings/SMClient_errors" \
@@ -1018,6 +1038,106 @@ getEfpData()
         reportMessage \
         "info" \
         "Did not find SMClient issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="dcvsm.*Error during retrieval of host list for cluster"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/efp_dcvsm_errors
+
+        reportMessage \
+        "critical" \
+        "Identified an issue to connect into a DCV SM cluster." \
+        "${temp_dir}/warnings/efp_dcvsm_errors" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCV SM issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="SQL.*No current connection"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/efp_db_errors
+
+        reportMessage \
+        "critical" \
+        "Identified connection issues with the database." \
+        "${temp_dir}/warnings/efp_db_errors" \
+        "Please check your database service status if the service is working. Also test if the EF Portal can reach the database IP and port." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find database connection issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="error.*Failed to retrieve a valid token for user.*dcvsm"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/efp_dcvsm_cluster
+
+        reportMessage \
+        "critical" \
+        "Identified failure to retrieve a valid token for DCV SM cluster." \
+        "${temp_dir}/warnings/efp_dcvsm_cluster" \
+        "Please check your DCV SM Cluster configuration and logs to identify why is not possible to retrieve a valid token." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCVM SM token issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="slurm.*jobs.*error"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/slurm_jobs_errors
+
+        reportMessage \
+        "critical" \
+        "Identified SLURM jobs errors." \
+        "${temp_dir}/warnings/slurm_jobs_errors" \
+        "Please check your SLURM service to identify the root cause." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SLURM jobs issues events." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="syntax error near unexpected token"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/efp_syntax_errors
+
+        reportMessage \ 
+        "critical" \
+        "Identified EF Portal scripts with syntax errors." \
+        "${temp_dir}/warnings/efp_syntax_errors" \
+        "Please check your published applicatons and customized files to identify from where the syntax error is coming." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find EF Portal scripts syntax issue events." \
         "null" \
         "null" \
         "null"
