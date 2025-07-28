@@ -59,6 +59,7 @@ done
 main()
 {
     welcomeMessage
+    checkEfpDir
     checkLinuxDistro
     checkRequirements
     createTempDirs

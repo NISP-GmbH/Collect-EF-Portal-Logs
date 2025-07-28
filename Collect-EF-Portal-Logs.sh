@@ -1228,6 +1228,16 @@ getJavaInfo()
     done
 }
 
+checkEfpDir()
+{
+    if [ ! -d $efp_dir ]
+    then
+        echo ">>> $efp_dir <<< does not exsit. Can not continue."
+        exit 40
+    fi
+}
+
+
 # global vars
 RED='\033[0;31m'
 BLUE='\033[0;34m'
@@ -1289,6 +1299,7 @@ done
 main()
 {
     welcomeMessage
+    checkEfpDir
     checkLinuxDistro
     checkRequirements
     createTempDirs

@@ -1211,3 +1211,13 @@ getJavaInfo()
         md5sum "$jar_file" &>> "${target_dir}/jar_files_md5sum"
     done
 }
+
+checkEfpDir()
+{
+    if [ ! -d $efp_dir ]
+    then
+        echo ">>> $efp_dir <<< does not exsit. Can not continue."
+        exit 40
+    fi
+}
+
