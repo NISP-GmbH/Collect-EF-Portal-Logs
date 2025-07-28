@@ -348,17 +348,6 @@ encryptLogCollection()
     gpg --symmetric --cipher-algo AES256 --batch --yes --passphrase "${encrypt_password}" --output "${encrypted_file_name}"  "${compressed_file_name}"
 }
 
-checkEfDir()
-{
-	if [ -d /opt/nisp ]
-	then
-		efp_dir="/opt/nisp"
-	else
-		efp_dir="/opt/nice"
-	fi
-	
-}
-
 checkLinuxDistro()
 {
     echo "Checking your Linux distribution..."
@@ -1291,13 +1280,15 @@ do
         --collect-logs)
             collect_log_only=true
         ;;
+        --efp_dir=*)
+            efp_dir="${arg#*=}"
+        ;;
     esac
 done
 
 main()
 {
     welcomeMessage
-	checkEfDir
     checkLinuxDistro
     checkRequirements
     createTempDirs

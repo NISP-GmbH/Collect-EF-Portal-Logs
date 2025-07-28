@@ -50,13 +50,15 @@ do
         --collect-logs)
             collect_log_only=true
         ;;
+        --efp_dir=*)
+            efp_dir="${arg#*=}"
+        ;;
     esac
 done
 
 main()
 {
     welcomeMessage
-	checkEfDir
     checkLinuxDistro
     checkRequirements
     createTempDirs

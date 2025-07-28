@@ -332,17 +332,6 @@ encryptLogCollection()
     gpg --symmetric --cipher-algo AES256 --batch --yes --passphrase "${encrypt_password}" --output "${encrypted_file_name}"  "${compressed_file_name}"
 }
 
-checkEfDir()
-{
-	if [ -d /opt/nisp ]
-	then
-		efp_dir="/opt/nisp"
-	else
-		efp_dir="/opt/nice"
-	fi
-	
-}
-
 checkLinuxDistro()
 {
     echo "Checking your Linux distribution..."

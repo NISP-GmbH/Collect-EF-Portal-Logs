@@ -12,4 +12,7 @@ wget --no-check-certificate -qO- /tmp/Collect-EF-Portal-Logs.sh https://raw.gith
 __Important:__ The script will not stop/start or touch any service without your permission. When needed, the script will ask and you can say no if you do not agree.
 
 
-If your OS is not supported, you can force the log collect with --force parameter.
+# Parameters
+
+- *--force:* If your OS is not supported, you can force the log collect with --force parameter.
+- *--efp_path=:* If you setup EF Portal in non usual path (/opt/nisp) you can use --efp_path=/my/own/path/
