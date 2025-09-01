@@ -78,11 +78,26 @@ main()
     getEfpData
     getEfpPermissions
 	doHtmlReport
+
+    # If 'report only' was selected, finalize the report and exit.
+    if [[ "$report_only" == "true" ]]; then
+        finalizeReport
+        removeTempDirs
+        byebyeMessage
+        exit 0
+    fi
+
+    # Otherwise, proceed with compressing and uploading the logs.
     compressLogCollection
     encryptLogCollection
     uploadLogCollection
     removeTempDirs
+    byebyeMessage
     exit 0
 }
 
 main
+
+# unknown error
+echo "Unknown error!"
+exit 255

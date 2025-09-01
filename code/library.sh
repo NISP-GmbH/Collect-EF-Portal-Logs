@@ -214,16 +214,36 @@ byebyeMessage()
     echo -e "${GREEN}Thank you! ${NC}"
 }
 
+finalizeReport() {
+    echo "Finalizing reports..."
+    if [ -f "$efp_report_txt_path" ]; then
+        cp "$efp_report_txt_path" .
+        echo -e "${GREEN}Report saved to: $(pwd)/$efp_report_txt_file_name${NC}"
+    else
+        echo -e "${RED}Warning: Text report file not found at $efp_report_txt_path${NC}"
+    fi
+
+    if [ -f "$efp_report_html_path" ]; then
+        cp "$efp_report_html_path" .
+        echo -e "${GREEN}HTML Report saved to: $(pwd)/$efp_report_html_file_name${NC}"
+    else
+        echo -e "${RED}Warning: HTML report file not found at $efp_report_html_path${NC}"
+    fi
+}
+
 reportMessage()
 {
     local message_type="$1"
     local message_text="$2"
-    if [[ "$3" == "null" ]]
-    then
-        local log_file="${efp_report_txt_file_name}"
+    
+    # FIX: Use the full path for the text report file.
+    if [[ "$3" == "null" ]]; then
+        local log_file="${efp_report_txt_path}"
     else
-        local log_file="${efp_report_txt_file_name} $3"
+        # The second file path ($3) is already a full path inside temp_dir
+        local log_file="${efp_report_txt_path} $3"
     fi
+
     local message_suggestion="$4"
     local recommended_links="$5"
     local target_dir="$6"
@@ -381,7 +401,8 @@ welcomeMessage()
 
     case $option_selected in
         1)
-            echo -e "${GREEN}The report will be saved in the same directory of the script with the name >> $efp_report_file_name << and >> $efp_report_html_file_name <<.${NC}"
+            # FIX: Used the correct variable for the text report file name
+            echo -e "${GREEN}The report will be saved in the same directory of the script with the name >> $efp_report_txt_file_name << and >> $efp_report_html_file_name <<.${NC}"
             report_only="true"
         ;;
         2)
