@@ -1192,7 +1192,7 @@ getEfpData()
     else
         reportMessage \
         "info" \
-        "Did not find CSRF Token not match session token issue." \
+        "Did not find Connection Refused messages." \
         "null" \
         "null" \
         "null" \
