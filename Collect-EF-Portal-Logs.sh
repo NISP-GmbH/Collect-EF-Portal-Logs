@@ -139,7 +139,7 @@ doHtmlReport()
 </head>
 <body>
     <header>
-        <h1>NISP DCV Server Report</h1>
+        <h1>EF Portal Server Report</h1>
         <div class="support-info">
             <p>If you need support:</p>
             <p> <a href="https://www.ni-sp.com/support/" target="_blank">https://www.ni-sp.com/support/</a></p>
@@ -771,7 +771,7 @@ getNetworkData()
             "warning" \
             "Network errors were found in dmesg." \
             "${temp_dir}/warnings/found_network_issues" \
-            "You need to troubleshoot what is wrong with your ethernet card or the network, because this can cause issues in the DCV traffic." \
+            "You need to troubleshoot what is wrong with your ethernet card or the network driver.." \
             "null"
 
             sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
@@ -826,7 +826,7 @@ getNetworkData()
         "info" \
         "DNS resolution >> IS WORKING <<." \
         "${target_dir}/dns_is_working" \
-        "DNS is important to validate your DCV license and to reach your RLM server, if you are using one." \
+        "DNS is important to validate your EFP license and to reach your RLM server, if you are using one." \
         "null"
     else
         reportMessage \
@@ -845,7 +845,7 @@ getNetworkData()
             "warning" \
             "No external connectivity to ${ip_test_external}." \
             "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
-            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the DCV server logs for possible network issues." \
+            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the EFP server logs for possible network issues." \
             "null"
         else
             reportMessage \
@@ -995,7 +995,6 @@ getEfpData()
         done
     fi
 
-
     target_dir="${temp_dir}/efp_log/"
 
     if [ -d ${efp_dir}/enginframe/logs ]
@@ -1058,6 +1057,46 @@ getEfpData()
             sudo cp -r "$found_dir/server-log" "${target_dir}/sessions/$session_tmp_dir/"
         fi
     done
+
+    string_pattern="Connection refused"
+    warning_file_name="connection_refused"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        reportMessage \
+        "critical" \
+        "Identified >>> $count_string_pattern <<< messages about connection refused." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="request token does not match session token"
+    warning_file_name="csrf_token_does_not_match"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        reportMessage \
+        "warning" \
+        "Identified >>> $count_string_pattern <<< messages about CSRF Token not matching with the session token." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
+        "null"
+    fi
 
     string_pattern="Unable to get host chart for cluster.*SMClient"
     warning_file_name="SMClient_errors"
