@@ -979,7 +979,6 @@ getEfpData()
         done
     fi
 
-
     target_dir="${temp_dir}/efp_log/"
 
     if [ -d ${efp_dir}/enginframe/logs ]
@@ -1042,6 +1041,46 @@ getEfpData()
             sudo cp -r "$found_dir/server-log" "${target_dir}/sessions/$session_tmp_dir/"
         fi
     done
+
+    string_pattern="Connection refused"
+    warning_file_name="connection_refused"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        reportMessage \
+        "critical" \
+        "Identified >>> $count_string_pattern <<< messages about connection refused." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="request token does not match session token"
+    warning_file_name="csrf_token_does_not_match"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        reportMessage \
+        "warning" \
+        "Identified >>> $count_string_pattern <<< messages about CSRF Token not matching with the session token." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null"
+    else
+        reportMessage \
+        "info" \
+        "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
+        "null"
+    fi
 
     string_pattern="Unable to get host chart for cluster.*SMClient"
     warning_file_name="SMClient_errors"
