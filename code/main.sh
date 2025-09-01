@@ -64,6 +64,7 @@ main()
     checkRequirements
     createTempDirs
     checkPackagesVersions
+    checkEfpSetuid
     getOsData
     getNetworkData
     getEnvironmentVars
@@ -75,6 +76,7 @@ main()
     getEtcAuthSelect
     getJavaInfo
     getEfpData
+    getEfpPermissions
 	doHtmlReport
     compressLogCollection
     encryptLogCollection
