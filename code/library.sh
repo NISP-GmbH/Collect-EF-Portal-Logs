@@ -458,7 +458,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf sssd_log kerberos_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf sssd_log kerberos_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_permissions ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -530,6 +530,43 @@ checkPackagesVersions()
     fi
 }
 
+checkEfpSetuid()
+{
+    echo "Checking for required setuid permissions..."
+
+    # Find all potential checkpassword-pam files within the EnginFrame installation
+    local pam_files=$(find "${efp_dir}" -type f -name "checkpassword-pam.*" 2>/dev/null)
+
+    if [ -z "$pam_files" ]; then
+        reportMessage \
+        "warning" \
+        "Could not find any 'checkpassword-pam' binaries." \
+        "null" \
+        "The PAM plugin might not be installed correctly or the script is looking in the wrong directory. This can cause authentication issues." \
+        "null"
+        return
+    fi
+
+    for file in $pam_files; do
+        # Check if the file has the setuid bit set using find's -perm check
+        if ! find "$file" -perm -4000 | grep -q "."; then
+            reportMessage \
+            "critical" \
+            "Missing setuid permission on critical file." \
+            "null" \
+            "The file '${file}' is missing the setuid bit. This will cause PAM authentication to fail. Please run 'sudo chmod u+s \"${file}\"' to fix it." \
+            "null"
+        else
+            reportMessage \
+            "info" \
+            "File '${file}' has correct setuid permissions." \
+            "null" \
+            "null" \
+            "null"
+        fi
+    done
+}
+
 getEnvironmentVars()
 {
     echo "Collecting environment variables..."
@@ -563,7 +600,8 @@ getPamData()
 
     if [ -d /etc/pam.d ]
     then
-        sudo cp -r /etc/pam.d ${target_dir} > /dev/null 2>&1
+        # Use -L to dereference symbolic links and copy the actual files
+        sudo cp -Lr /etc/pam.d ${target_dir} > /dev/null 2>&1
     fi
 }
 
@@ -856,6 +894,16 @@ getOsData()
     then
         sudo cp /etc/centos-release $target_dir > /dev/null 2>&1
     fi
+    
+    if [ -f /etc/shadow ]
+    then
+        sudo cp /etc/shadow $target_dir > /dev/null 2>&1
+    fi
+
+    if [ -f /etc/group ]
+    then
+        sudo cp /etc/group $target_dir > /dev/null 2>&1
+    fi
 
     if [ -f /usr/lib/apt ]
     then
@@ -898,7 +946,7 @@ getOsData()
     fi
 
     target_dir="${temp_dir}/journal_log"
-    sudo journalctl -n 50000 > ${target_dir}/journal_last_50000_lines.log 2>&1
+    sudo journalctl -n 100000 > ${target_dir}/journal_last_100000_lines.log 2>&1
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i "failed to allocate" > ${target_dir}/failed_to_allocate_messages
@@ -1164,6 +1212,19 @@ getEfpData()
     fi
 }
 
+getEfpPermissions()
+{
+    echo "Collecting all EF Portal permissions..."
+    target_dir="${temp_dir}/efp_permissions/"
+
+    # Using find with -ls to get a detailed, structured list of all files and their permissions.
+    # This is a standard and easily comparable format.
+    sudo find "${efp_dir}" -ls > "${target_dir}/efp_file_permissions.ls" 2>/dev/null
+
+    # An alternative, more structured format using printf for easier parsing
+    sudo find "${efp_dir}" -printf "%M\t%u\t%g\t%p\n" > "${target_dir}/efp_file_permissions.txt" 2>/dev/null
+}
+
 getJavaInfo()
 {
     target_dir="${temp_dir}/java_info/"
@@ -1193,10 +1254,36 @@ getJavaInfo()
 
 checkEfpDir()
 {
-    if [ ! -d $efp_dir ]
-    then
-        echo ">>> $efp_dir <<< does not exsit. Can not continue."
+    # If --efp_dir is passed, we honor it. Otherwise, we try to auto-detect.
+    if [[ "$efp_dir" != "/opt/nisp" ]]; then
+        echo "User specified --efp_dir=${efp_dir}. Using it."
+    elif [ -d "/opt/nisp" ]; then
+        efp_dir="/opt/nisp"
+        echo "Found EnginFrame in /opt/nisp."
+    elif [ -d "/opt/nice" ]; then
+        efp_dir="/opt/nice"
+        echo "Found EnginFrame in /opt/nice."
+    else
+        # Find the script's absolute path, resolving symlinks
+        local script_path
+        script_path=$(readlink -f "$0")
+        # Check if 'enginframe' is in the path
+        if [[ "$script_path" == *"/enginframe/"* ]]; then
+            # Get the path part before the first '/enginframe/'
+            efp_dir=${script_path%%/enginframe/*}
+            echo "Determined EnginFrame base directory from script path: ${efp_dir}"
+        else
+            efp_dir="" # Reset to empty if not found
+        fi
+    fi
+
+    if [ -z "$efp_dir" ] || [ ! -d "$efp_dir" ]; then
+        echo -e "${RED}Error: Could not determine the EnginFrame installation directory.${NC}"
+        echo "Checked /opt/nisp, /opt/nice, and script path. Please specify the directory using the --efp_dir=<path> argument."
         exit 40
     fi
-}
 
+    # Update efp_dir_basename based on the found directory
+    efp_dir_basename=$(basename "${efp_dir}")
+    echo "Using ${efp_dir} as the EnginFrame installation directory."
+}
