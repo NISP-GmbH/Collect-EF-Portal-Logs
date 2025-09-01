@@ -235,6 +235,7 @@ finalizeReport() {
     if [ -f "$efp_report_txt_path" ]; then
         cp "$efp_report_txt_path" .
         echo -e "${GREEN}Report saved to: $(pwd)/$efp_report_txt_file_name${NC}"
+        echo -e "${GREEN}Use less -R $(pwd)/$efp_report_txt_file_name to read with colors.${NC}"
     else
         echo -e "${RED}Warning: Text report file not found at $efp_report_txt_path${NC}"
     fi
