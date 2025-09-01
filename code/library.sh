@@ -119,7 +119,62 @@ doHtmlReport()
             margin: 1rem 0 2rem;
         }
 
+        .log-details {
+            margin-top: 1rem;
+        }
+        .log-container {
+            position: relative;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+        }
+        .log-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            padding-top: 2.5rem; /* Space for the copy button */
+            max-height: 300px;
+            overflow-y: auto;
+            color: #f1f1f1;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .copy-btn:hover {
+            background-color: #444;
+        }
+
     </style>
+    <script>
+        function copyToClipboard(elementId, button) {
+            const textToCopy = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = button.innerText;
+                button.innerText = 'Copied!';
+                setTimeout(() => {
+                    button.innerText = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                const originalText = button.innerText;
+                button.innerText = 'Failed!';
+                setTimeout(() => {
+                    button.innerText = originalText;
+                }, 2000);
+            });
+        }
+    </script>
 </head>
 <body>
     <header>
@@ -171,9 +226,11 @@ reportMessage()
     fi
     local message_suggestion="$4"
     local recommended_links="$5"
+    local target_dir="$6"
+    local string_pattern="$7"
 
-    reportMessageWrite "${message_text}" "${log_file}" "${message_type}" "${message_suggestion}" "${recommended_links}"
-    reportMessageWriteHtml "${message_text}" "null" "${message_type}" "${message_suggestion}" "${recommended_links}"
+    reportMessageWrite "${message_text}" "${log_file}" "${message_type}" "${message_suggestion}" "${recommended_links}" "${target_dir}" "${string_pattern}"
+    reportMessageWriteHtml "${message_text}" "null" "${message_type}" "${message_suggestion}" "${recommended_links}" "${target_dir}" "${string_pattern}"
 }
 
 reportMessageWriteHtml()
@@ -183,6 +240,8 @@ reportMessageWriteHtml()
     local message_type=$3
     local message_suggestion=$4
     local recommended_links=$5
+    local target_dir="$6"
+    local string_pattern="$7"
 
     cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     <div class="report-section ${message_type}">
@@ -213,6 +272,25 @@ EOF
         </ul>
 EOF
     fi
+
+    if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
+    then
+        local unique_id="log_block_$(date +%s%N)"
+        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g')
+        if [ -n "$log_content" ]
+        then
+            cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+            <div class="log-details">
+                <p><strong>Found Patterns Log:</strong></p>
+                <div class="log-container">
+                    <button class="copy-btn" onclick="copyToClipboard('${unique_id}', this)">Copy</button>
+                    <pre id="${unique_id}"><code>${log_content}</code></pre>
+                </div>
+            </div>
+EOF
+        fi
+    fi
+
     cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     </div>
 EOF
@@ -225,6 +303,8 @@ reportMessageWrite()
     local message_type=$3
     local message_suggestion=$4
     local recommended_links=$5
+    local target_dir="$6"
+    local string_pattern="$7"
 
 
     case $message_type in
@@ -254,6 +334,17 @@ reportMessageWrite()
         do
             echo "- $link_recommended" | tee -a $log_file > /dev/null
         done
+    fi
+
+    if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
+    then
+        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null)
+        if [ -n "$log_content" ]
+        then
+            echo -e "\n--- Found Patterns Log ---" | tee -a $log_file > /dev/null
+            echo "$log_content" | tee -a $log_file > /dev/null
+            echo -e "--- End of Patterns Log ---\n" | tee -a $log_file > /dev/null
+        fi
     fi
 }
 welcomeMessage()
@@ -543,6 +634,8 @@ checkEfpSetuid()
         "Could not find any 'checkpassword-pam' binaries." \
         "null" \
         "The PAM plugin might not be installed correctly or the script is looking in the wrong directory. This can cause authentication issues." \
+        "null" \
+        "null" \
         "null"
         return
     fi
@@ -555,11 +648,15 @@ checkEfpSetuid()
             "Missing setuid permission on critical file." \
             "null" \
             "The file '${file}' is missing the setuid bit. This will cause PAM authentication to fail. Please run 'sudo chmod u+s \"${file}\"' to fix it." \
+            "null" \
+            "null" \
             "null"
         else
             reportMessage \
             "info" \
             "File '${file}' has correct setuid permissions." \
+            "null" \
+            "null" \
             "null" \
             "null" \
             "null"
@@ -669,11 +766,15 @@ getSssdData()
         "Identified SSSD errors." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please check your SSSD logs to identify why error messages are happening. It can affect your authentication." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find SSSD issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -756,6 +857,8 @@ getNetworkData()
             "Network errors were found in dmesg." \
             "${temp_dir}/warnings/found_network_issues" \
             "You need to troubleshoot what is wrong with your ethernet card or the network driver.." \
+            "null" \
+            "null" \
             "null"
 
             sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
@@ -763,6 +866,8 @@ getNetworkData()
             reportMessage \
             "info" \
             "Did not find network errors in the ethernet devices." \
+            "null" \
+            "null" \
             "null" \
             "null" \
             "null"
@@ -811,6 +916,8 @@ getNetworkData()
         "DNS resolution >> IS WORKING <<." \
         "${target_dir}/dns_is_working" \
         "DNS is important to validate your EFP license and to reach your RLM server, if you are using one." \
+        "null" \
+        "null" \
         "null"
     else
         reportMessage \
@@ -818,6 +925,8 @@ getNetworkData()
         "DNS resolution >> IS NOT WORKING <<." \
         "${target_dir}/dns_is_NOT_working ${temp_dir}/warnings/dns_is_NOT_working" \
         "You need to check your DHCP server and your /etc/resolv.conf to understand why your server can not solve DNS." \
+        "null" \
+        "null" \
         "null"
     fi
 
@@ -830,12 +939,16 @@ getNetworkData()
             "No external connectivity to ${ip_test_external}." \
             "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
             "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the EFP server logs for possible network issues." \
+            "null" \
+            "null" \
             "null"
         else
             reportMessage \
             "info" \
             "External connectivity to ${ip_test_external} was tested and is working." \
             "${target_dir}/ping_to_${ip_test_external}_is_working" \
+            "null" \
+            "null" \
             "null" \
             "null"
         fi
@@ -1052,11 +1165,15 @@ getEfpData()
         "Identified >>> $count_string_pattern <<< messages about connection refused." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1072,11 +1189,15 @@ getEfpData()
         "Identified >>> $count_string_pattern <<< messages about CSRF Token not matching with the session token." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1093,11 +1214,15 @@ getEfpData()
         "Identified a SMClient issue to connect into a cluster." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find SMClient issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1114,11 +1239,15 @@ getEfpData()
         "Identified an issue to connect into a DCV SM cluster." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find DCV SM issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1135,11 +1264,15 @@ getEfpData()
         "Identified connection issues with the database." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please check your database service status if the service is working. Also test if the EF Portal can reach the database IP and port." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find database connection issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1156,11 +1289,15 @@ getEfpData()
         "Identified failure to retrieve a valid token for DCV SM cluster." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please check your DCV SM Cluster configuration and logs to identify why is not possible to retrieve a valid token." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find DCVM SM token issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1177,11 +1314,15 @@ getEfpData()
         "Identified SLURM jobs errors." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please check your SLURM service to identify the root cause." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find SLURM jobs issues events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1198,11 +1339,15 @@ getEfpData()
         "Identified EF Portal scripts with syntax errors." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Please check your published applicatons and customized files to identify from where the syntax error is coming." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find EF Portal scripts syntax issue events." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1219,11 +1364,15 @@ getEfpData()
         "Identified issues to get a host list from a cluster." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "You need to check your cluster configuration and the connectivity with the cluster to identify and fix the issue." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find issues events to get host list from a cluster." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
@@ -1240,11 +1389,15 @@ getEfpData()
         "An I/O error was encountered submitting your job." \
         "${temp_dir}/warnings/${warning_file_name}" \
         "Is not possible to use I/O resources due some issue that is happening with your OS or the remote filesystem used. Please check your ef.log logs to get more details." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find I/O error issues events when submitting jobs." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
