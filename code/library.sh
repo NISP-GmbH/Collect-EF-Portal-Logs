@@ -123,7 +123,7 @@ doHtmlReport()
 </head>
 <body>
     <header>
-        <h1>NISP DCV Server Report</h1>
+        <h1>EF Portal Server Report</h1>
         <div class="support-info">
             <p>If you need support:</p>
             <p> <a href="https://www.ni-sp.com/support/" target="_blank">https://www.ni-sp.com/support/</a></p>
@@ -755,7 +755,7 @@ getNetworkData()
             "warning" \
             "Network errors were found in dmesg." \
             "${temp_dir}/warnings/found_network_issues" \
-            "You need to troubleshoot what is wrong with your ethernet card or the network, because this can cause issues in the DCV traffic." \
+            "You need to troubleshoot what is wrong with your ethernet card or the network driver.." \
             "null"
 
             sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
@@ -810,7 +810,7 @@ getNetworkData()
         "info" \
         "DNS resolution >> IS WORKING <<." \
         "${target_dir}/dns_is_working" \
-        "DNS is important to validate your DCV license and to reach your RLM server, if you are using one." \
+        "DNS is important to validate your EFP license and to reach your RLM server, if you are using one." \
         "null"
     else
         reportMessage \
@@ -829,7 +829,7 @@ getNetworkData()
             "warning" \
             "No external connectivity to ${ip_test_external}." \
             "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
-            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the DCV server logs for possible network issues." \
+            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the EFP server logs for possible network issues." \
             "null"
         else
             reportMessage \
