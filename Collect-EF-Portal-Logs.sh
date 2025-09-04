@@ -135,11 +135,66 @@ doHtmlReport()
             margin: 1rem 0 2rem;
         }
 
+        .log-details {
+            margin-top: 1rem;
+        }
+        .log-container {
+            position: relative;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+        }
+        .log-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            padding-top: 2.5rem; /* Space for the copy button */
+            max-height: 300px;
+            overflow-y: auto;
+            color: #f1f1f1;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .copy-btn:hover {
+            background-color: #444;
+        }
+
     </style>
+    <script>
+        function copyToClipboard(elementId, button) {
+            const textToCopy = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = button.innerText;
+                button.innerText = 'Copied!';
+                setTimeout(() => {
+                    button.innerText = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                const originalText = button.innerText;
+                button.innerText = 'Failed!';
+                setTimeout(() => {
+                    button.innerText = originalText;
+                }, 2000);
+            });
+        }
+    </script>
 </head>
 <body>
     <header>
-        <h1>NISP DCV Server Report</h1>
+        <h1>EF Portal Server Report</h1>
         <div class="support-info">
             <p>If you need support:</p>
             <p> <a href="https://www.ni-sp.com/support/" target="_blank">https://www.ni-sp.com/support/</a></p>
@@ -175,21 +230,44 @@ byebyeMessage()
     echo -e "${GREEN}Thank you! ${NC}"
 }
 
+finalizeReport() {
+    echo "Finalizing reports..."
+    if [ -f "$efp_report_txt_path" ]; then
+        cp "$efp_report_txt_path" .
+        echo -e "${GREEN}Report saved to: $(pwd)/$efp_report_txt_file_name${NC}"
+        echo -e "${GREEN}Use less -R $(pwd)/$efp_report_txt_file_name to read with colors.${NC}"
+    else
+        echo -e "${RED}Warning: Text report file not found at $efp_report_txt_path${NC}"
+    fi
+
+    if [ -f "$efp_report_html_path" ]; then
+        cp "$efp_report_html_path" .
+        echo -e "${GREEN}HTML Report saved to: $(pwd)/$efp_report_html_file_name${NC}"
+    else
+        echo -e "${RED}Warning: HTML report file not found at $efp_report_html_path${NC}"
+    fi
+}
+
 reportMessage()
 {
     local message_type="$1"
     local message_text="$2"
-    if [[ "$3" == "null" ]]
-    then
-        local log_file="${efp_report_txt_file_name}"
+    
+    # FIX: Use the full path for the text report file.
+    if [[ "$3" == "null" ]]; then
+        local log_file="${efp_report_txt_path}"
     else
-        local log_file="${efp_report_txt_file_name} $3"
+        # The second file path ($3) is already a full path inside temp_dir
+        local log_file="${efp_report_txt_path} $3"
     fi
+
     local message_suggestion="$4"
     local recommended_links="$5"
+    local target_dir="$6"
+    local string_pattern="$7"
 
-    reportMessageWrite "${message_text}" "${log_file}" "${message_type}" "${message_suggestion}" "${recommended_links}"
-    reportMessageWriteHtml "${message_text}" "null" "${message_type}" "${message_suggestion}" "${recommended_links}"
+    reportMessageWrite "${message_text}" "${log_file}" "${message_type}" "${message_suggestion}" "${recommended_links}" "${target_dir}" "${string_pattern}"
+    reportMessageWriteHtml "${message_text}" "null" "${message_type}" "${message_suggestion}" "${recommended_links}" "${target_dir}" "${string_pattern}"
 }
 
 reportMessageWriteHtml()
@@ -199,6 +277,8 @@ reportMessageWriteHtml()
     local message_type=$3
     local message_suggestion=$4
     local recommended_links=$5
+    local target_dir="$6"
+    local string_pattern="$7"
 
     cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     <div class="report-section ${message_type}">
@@ -229,6 +309,25 @@ EOF
         </ul>
 EOF
     fi
+
+    if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
+    then
+        local unique_id="log_block_$(date +%s%N)"
+        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g')
+        if [ -n "$log_content" ]
+        then
+            cat << EOF >> ${efp_report_dir_path}/html_${message_type}
+            <div class="log-details">
+                <p><strong>Found Patterns Log:</strong></p>
+                <div class="log-container">
+                    <button class="copy-btn" onclick="copyToClipboard('${unique_id}', this)">Copy</button>
+                    <pre id="${unique_id}"><code>${log_content}</code></pre>
+                </div>
+            </div>
+EOF
+        fi
+    fi
+
     cat << EOF >> ${efp_report_dir_path}/html_${message_type}
     </div>
 EOF
@@ -241,6 +340,8 @@ reportMessageWrite()
     local message_type=$3
     local message_suggestion=$4
     local recommended_links=$5
+    local target_dir="$6"
+    local string_pattern="$7"
 
 
     case $message_type in
@@ -270,6 +371,17 @@ reportMessageWrite()
         do
             echo "- $link_recommended" | tee -a $log_file > /dev/null
         done
+    fi
+
+    if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
+    then
+        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null)
+        if [ -n "$log_content" ]
+        then
+            echo -e "\n--- Found Patterns Log ---" | tee -a $log_file > /dev/null
+            echo "$log_content" | tee -a $log_file > /dev/null
+            echo -e "--- End of Patterns Log ---\n" | tee -a $log_file > /dev/null
+        fi
     fi
 }
 welcomeMessage()
@@ -306,7 +418,8 @@ welcomeMessage()
 
     case $option_selected in
         1)
-            echo -e "${GREEN}The report will be saved in the same directory of the script with the name >> $efp_report_file_name << and >> $efp_report_html_file_name <<.${NC}"
+            # FIX: Used the correct variable for the text report file name
+            echo -e "${GREEN}The report will be saved in the same directory of the script with the name >> $efp_report_txt_file_name << and >> $efp_report_html_file_name <<.${NC}"
             report_only="true"
         ;;
         2)
@@ -346,17 +459,6 @@ uploadLogCollection()
 encryptLogCollection()
 {
     gpg --symmetric --cipher-algo AES256 --batch --yes --passphrase "${encrypt_password}" --output "${encrypted_file_name}"  "${compressed_file_name}"
-}
-
-checkEfDir()
-{
-	if [ -d /opt/nisp ]
-	then
-		efp_dir="/opt/nisp"
-	else
-		efp_dir="/opt/nice"
-	fi
-	
 }
 
 checkLinuxDistro()
@@ -485,7 +587,7 @@ removeTempDirs()
 createTempDirs()
 {
     echo "Creating temp dirs structure to store the data..."
-    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_files ${efp_report_dir_name} network_data
+    for new_dir in java_info kerberos_conf pam_conf authselect_conf sssd_conf sssd_log kerberos_conf nsswitch_conf warnings os_info os_log journal_log hardware_info efp_log efp_conf efp_permissions ${efp_report_dir_name} network_data
     do
         sudo mkdir -p ${temp_dir}/$new_dir
     done
@@ -557,6 +659,49 @@ checkPackagesVersions()
     fi
 }
 
+checkEfpSetuid()
+{
+    echo "Checking for required setuid permissions..."
+
+    # Find all potential checkpassword-pam files within the EnginFrame installation
+    local pam_files=$(find "${efp_dir}" -type f -name "checkpassword-pam.*" 2>/dev/null)
+
+    if [ -z "$pam_files" ]; then
+        reportMessage \
+        "warning" \
+        "Could not find any 'checkpassword-pam' binaries." \
+        "null" \
+        "The PAM plugin might not be installed correctly or the script is looking in the wrong directory. This can cause authentication issues." \
+        "null" \
+        "null" \
+        "null"
+        return
+    fi
+
+    for file in $pam_files; do
+        # Check if the file has the setuid bit set using find's -perm check
+        if ! find "$file" -perm -4000 | grep -q "."; then
+            reportMessage \
+            "critical" \
+            "Missing setuid permission on critical file." \
+            "null" \
+            "The file '${file}' is missing the setuid bit. This will cause PAM authentication to fail. Please run 'sudo chmod u+s \"${file}\"' to fix it." \
+            "null" \
+            "null" \
+            "null"
+        else
+            reportMessage \
+            "info" \
+            "File '${file}' has correct setuid permissions." \
+            "null" \
+            "null" \
+            "null" \
+            "null" \
+            "null"
+        fi
+    done
+}
+
 getEnvironmentVars()
 {
     echo "Collecting environment variables..."
@@ -590,7 +735,8 @@ getPamData()
 
     if [ -d /etc/pam.d ]
     then
-        sudo cp -r /etc/pam.d ${target_dir} > /dev/null 2>&1
+        # Use -L to dereference symbolic links and copy the actual files
+        sudo cp -Lr /etc/pam.d ${target_dir} > /dev/null 2>&1
     fi
 }
 
@@ -645,6 +791,31 @@ getSssdData()
     if [ -f /var/log/sssd ]
     then
         sudo cp -r /var/log/sssd ${target_dir}> /dev/null 2>&1
+    fi
+
+    string_pattern="sssd.*error"
+    warning_file_name="sssd_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+    
+        reportMessage \ 
+        "critical" \
+        "Identified SSSD errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your SSSD logs to identify why error messages are happening. It can affect your authentication." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SSSD issues events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
     fi
 }
 
@@ -723,7 +894,9 @@ getNetworkData()
             "warning" \
             "Network errors were found in dmesg." \
             "${temp_dir}/warnings/found_network_issues" \
-            "You need to troubleshoot what is wrong with your ethernet card or the network, because this can cause issues in the DCV traffic." \
+            "You need to troubleshoot what is wrong with your ethernet card or the network driver.." \
+            "null" \
+            "null" \
             "null"
 
             sudo dmesg | grep -iE '(eth|eno|ens|enp|wl)[0-9]: (link|driver|hardware|error|timeout)' | grep -i "error\|fail\|down\|collision\|duplex\|timeout" > ${target_dir}/network_issues_log
@@ -731,6 +904,8 @@ getNetworkData()
             reportMessage \
             "info" \
             "Did not find network errors in the ethernet devices." \
+            "null" \
+            "null" \
             "null" \
             "null" \
             "null"
@@ -778,7 +953,9 @@ getNetworkData()
         "info" \
         "DNS resolution >> IS WORKING <<." \
         "${target_dir}/dns_is_working" \
-        "DNS is important to validate your DCV license and to reach your RLM server, if you are using one." \
+        "DNS is important to validate your EFP license and to reach your RLM server, if you are using one." \
+        "null" \
+        "null" \
         "null"
     else
         reportMessage \
@@ -786,6 +963,8 @@ getNetworkData()
         "DNS resolution >> IS NOT WORKING <<." \
         "${target_dir}/dns_is_NOT_working ${temp_dir}/warnings/dns_is_NOT_working" \
         "You need to check your DHCP server and your /etc/resolv.conf to understand why your server can not solve DNS." \
+        "null" \
+        "null" \
         "null"
     fi
 
@@ -797,13 +976,17 @@ getNetworkData()
             "warning" \
             "No external connectivity to ${ip_test_external}." \
             "${target_dir}/ping_to_${ip_test_external}_is_NOT_working ${temp_dir}/warnings/ping_to_${ip_test_external}_is_NOT_working" \
-            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the DCV server logs for possible network issues." \
+            "It seems that you have issues to get external connectivity. Can be your firewall blocking or some network issue. You need to check the EFP server logs for possible network issues." \
+            "null" \
+            "null" \
             "null"
         else
             reportMessage \
             "info" \
             "External connectivity to ${ip_test_external} was tested and is working." \
             "${target_dir}/ping_to_${ip_test_external}_is_working" \
+            "null" \
+            "null" \
             "null" \
             "null"
         fi
@@ -862,6 +1045,16 @@ getOsData()
     then
         sudo cp /etc/centos-release $target_dir > /dev/null 2>&1
     fi
+    
+    if [ -f /etc/shadow ]
+    then
+        sudo cp /etc/shadow $target_dir > /dev/null 2>&1
+    fi
+
+    if [ -f /etc/group ]
+    then
+        sudo cp /etc/group $target_dir > /dev/null 2>&1
+    fi
 
     if [ -f /usr/lib/apt ]
     then
@@ -904,12 +1097,14 @@ getOsData()
     fi
 
     target_dir="${temp_dir}/journal_log"
-    sudo journalctl -n 50000 > ${target_dir}/journal_last_50000_lines.log 2>&1
+    sudo journalctl -n 100000 > ${target_dir}/journal_last_100000_lines.log 2>&1
     sudo journalctl --no-page | grep -i selinux > ${target_dir}/selinux_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i apparmor > ${target_dir}/apparmor_log_from_journal 2>&1
     sudo journalctl --no-page | grep -i "failed to allocate" > ${target_dir}/failed_to_allocate_messages
-    sudo journalctl --no-page | grep -i "fail" > ${target_dir}/fail_messages
-    sudo journalctl --no-page | grep -i "erro" > ${target_dir}/error_messages
+    sudo journalctl --no-page | grep -i -C 10 "fail" > ${target_dir}/fail_messages
+    sudo journalctl --no-page | grep -i -C 10 "erro" > ${target_dir}/error_messages
+    sudo journalctl --no-page | grep -i -C 10 "(timeout|timedout|timed out)" > ${target_dir}/timeout_messages
+    sudo journalctl --no-page | grep -i -C 10 "dcv" > ${target_dir}/dcv_messages
 }
 
 getEfpData()
@@ -934,7 +1129,6 @@ getEfpData()
 			fi
         done
     fi
-
 
     target_dir="${temp_dir}/efp_log/"
 
@@ -999,45 +1193,266 @@ getEfpData()
         fi
     done
 
-    string_pattern="Timeout while waiting for Xdcv process"
+    string_pattern="Connection refused"
+    warning_file_name="connection_refused"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/Xdcv_errors
-    
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
         reportMessage \
         "critical" \
-        "Identified some issue with Xdcv during DCV Session creation." \
-        "${temp_dir}/warnings/Xdcv_timeout" \
-        "Xdcv is not starting in a expected time. You need to check your DCV Server." \
-        "null"
+        "Identified >>> $count_string_pattern <<< messages about connection refused." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
-        "Did not find Xdcv timeout issues events." \
+        "Did not find Connection Refused messages." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="request token does not match session token"
+    warning_file_name="csrf_token_does_not_match"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        reportMessage \
+        "warning" \
+        "Identified >>> $count_string_pattern <<< messages about CSRF Token not matching with the session token." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find CSRF Token not match session token issue." \
+        "null" \
+        "null" \
         "null" \
         "null" \
         "null"
     fi
 
     string_pattern="Unable to get host chart for cluster.*SMClient"
+    warning_file_name="SMClient_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/SMClient_errors
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
     
-        reportMessage \ 
+        reportMessage \
         "critical" \
         "Identified a SMClient issue to connect into a cluster." \
-        "${temp_dir}/warnings/SMClient_errors" \
+        "${temp_dir}/warnings/${warning_file_name}" \
         "Please review your cluster configuration and credentials." \
-        "null"
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
     else
         reportMessage \
         "info" \
         "Did not find SMClient issues events." \
         "null" \
         "null" \
+        "null" \
+        "null" \
         "null"
     fi
+
+    string_pattern="dcvsm.*Error during retrieval of host list for cluster"
+    warning_file_name="efp_dcvsm_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified an issue to connect into a DCV SM cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please review your cluster configuration and credentials." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCV SM issues events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="SQL.*No current connection"
+    warning_file_name="efp_db_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified connection issues with the database." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your database service status if the service is working. Also test if the EF Portal can reach the database IP and port." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find database connection issues events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="error.*Failed to retrieve a valid token for user.*dcvsm"
+    warning_file_name="efp_dcvsm_cluster"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified failure to retrieve a valid token for DCV SM cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your DCV SM Cluster configuration and logs to identify why is not possible to retrieve a valid token." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find DCVM SM token issues events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="slurm.*jobs.*error"
+    warning_file_name="slurm_jobs_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified SLURM jobs errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your SLURM service to identify the root cause." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find SLURM jobs issues events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="syntax error near unexpected token"
+    warning_file_name="efp_syntax_errors"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified EF Portal scripts with syntax errors." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Please check your published applicatons and customized files to identify from where the syntax error is coming." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find EF Portal scripts syntax issue events." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="grid.*Unable to get host list for cluster"
+    warning_file_name="efp_unable_to_get_host_list_for_cluster"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "Identified issues to get a host list from a cluster." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "You need to check your cluster configuration and the connectivity with the cluster to identify and fix the issue." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find issues events to get host list from a cluster." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+
+    string_pattern="An I/O error was encountered submitting your job"
+    warning_file_name="efp_io_error_while_submitting_job"
+    if safeLogCheck "${string_pattern}" "${target_dir}"
+    then
+        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+
+        reportMessage \
+        "critical" \
+        "An I/O error was encountered submitting your job." \
+        "${temp_dir}/warnings/${warning_file_name}" \
+        "Is not possible to use I/O resources due some issue that is happening with your OS or the remote filesystem used. Please check your ef.log logs to get more details." \
+        "null" \
+        "${target_dir}" \
+        "${string_pattern}"
+    else
+        reportMessage \
+        "info" \
+        "Did not find I/O error issues events when submitting jobs." \
+        "null" \
+        "null" \
+        "null" \
+        "null" \
+        "null"
+    fi
+}
+
+getEfpPermissions()
+{
+    echo "Collecting all EF Portal permissions..."
+    target_dir="${temp_dir}/efp_permissions/"
+
+    # Using find with -ls to get a detailed, structured list of all files and their permissions.
+    # This is a standard and easily comparable format.
+    sudo find "${efp_dir}" -ls > "${target_dir}/efp_file_permissions.ls" 2>/dev/null
+
+    # An alternative, more structured format using printf for easier parsing
+    sudo find "${efp_dir}" -printf "%M\t%u\t%g\t%p\n" > "${target_dir}/efp_file_permissions.txt" 2>/dev/null
 }
 
 getJavaInfo()
@@ -1065,6 +1480,42 @@ getJavaInfo()
     do
         md5sum "$jar_file" &>> "${target_dir}/jar_files_md5sum"
     done
+}
+
+checkEfpDir()
+{
+    # If --efp_dir is passed, we honor it. Otherwise, we try to auto-detect.
+    if [[ "$efp_dir" != "/opt/nisp" ]]; then
+        echo "User specified --efp_dir=${efp_dir}. Using it."
+    elif [ -d "/opt/nisp" ]; then
+        efp_dir="/opt/nisp"
+        echo "Found EnginFrame in /opt/nisp."
+    elif [ -d "/opt/nice" ]; then
+        efp_dir="/opt/nice"
+        echo "Found EnginFrame in /opt/nice."
+    else
+        # Find the script's absolute path, resolving symlinks
+        local script_path
+        script_path=$(readlink -f "$0")
+        # Check if 'enginframe' is in the path
+        if [[ "$script_path" == *"/enginframe/"* ]]; then
+            # Get the path part before the first '/enginframe/'
+            efp_dir=${script_path%%/enginframe/*}
+            echo "Determined EnginFrame base directory from script path: ${efp_dir}"
+        else
+            efp_dir="" # Reset to empty if not found
+        fi
+    fi
+
+    if [ -z "$efp_dir" ] || [ ! -d "$efp_dir" ]; then
+        echo -e "${RED}Error: Could not determine the EnginFrame installation directory.${NC}"
+        echo "Checked /opt/nisp, /opt/nice, and script path. Please specify the directory using the --efp_dir=<path> argument."
+        exit 40
+    fi
+
+    # Update efp_dir_basename based on the found directory
+    efp_dir_basename=$(basename "${efp_dir}")
+    echo "Using ${efp_dir} as the EnginFrame installation directory."
 }
 
 # global vars
@@ -1119,17 +1570,21 @@ do
         --collect-logs)
             collect_log_only=true
         ;;
+        --efp_dir=*)
+            efp_dir="${arg#*=}"
+        ;;
     esac
 done
 
 main()
 {
     welcomeMessage
-	checkEfDir
+    checkEfpDir
     checkLinuxDistro
     checkRequirements
     createTempDirs
     checkPackagesVersions
+    checkEfpSetuid
     getOsData
     getNetworkData
     getEnvironmentVars
@@ -1141,15 +1596,31 @@ main()
     getEtcAuthSelect
     getJavaInfo
     getEfpData
+    getEfpPermissions
 	doHtmlReport
+
+    # If 'report only' was selected, finalize the report and exit.
+    if [[ "$report_only" == "true" ]]; then
+        finalizeReport
+        removeTempDirs
+        byebyeMessage
+        exit 0
+    fi
+
+    # Otherwise, proceed with compressing and uploading the logs.
     compressLogCollection
     encryptLogCollection
     uploadLogCollection
     removeTempDirs
+    byebyeMessage
     exit 0
 }
 
 main
+
+# unknown error
+echo "Unknown error!"
+exit 255
 
 # unknown error
 echo "Unknown error!"
