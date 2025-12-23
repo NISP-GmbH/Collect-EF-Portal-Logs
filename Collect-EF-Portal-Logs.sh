@@ -445,8 +445,8 @@ welcomeMessage()
 uploadLogCollection()
 {
     echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
-
     curl_response=$(curl -s -w "\n%{http_code}" -F "service=efp" -F "identifier=${identifier_string}" -F "file=@${encrypted_file_name}" "${upload_url}")
+
     if [ $? -ne 0 ]
     then
         echo "Failed to upload the file!"
