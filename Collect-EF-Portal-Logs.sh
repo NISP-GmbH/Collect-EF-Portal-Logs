@@ -427,7 +427,17 @@ welcomeMessage()
             echo "If you do not have internet acess when executing this script, you will have an option to store the file in the end."
 
             echo "Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc."
-            read identifier_string
+            echo -e "${YELLOW}Note: Identifier is mandatory for upload.${NC}"
+            while true; do
+                read identifier_string
+                # Trim leading/trailing whitespace
+                identifier_string=$(echo "$identifier_string" | xargs)
+                if [[ -n "$identifier_string" ]]; then
+                    break
+                else
+                    echo -e "${RED}Identifier cannot be empty. Please enter a valid identifier:${NC}"
+                fi
+            done
         ;;
     esac
 }
@@ -436,7 +446,7 @@ uploadLogCollection()
 {
     echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
 
-    curl_response=$(curl -s -w "\n%{http_code}" -F "file=@${encrypted_file_name}" "${upload_url}")
+    curl_response=$(curl -s -w "\n%{http_code}" -F "service=efp" -F "identifier=${identifier_string}" -F "file=@${encrypted_file_name}" "${upload_url}")
     if [ $? -ne 0 ]
     then
         echo "Failed to upload the file!"
