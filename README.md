@@ -14,4 +14,18 @@ __Important:__ The script will not stop/start or touch any service without your 
 # Parameters
 
 - *--force:* If your OS is not supported, you can force the log collect with --force parameter.
-- *--efp_path=:* If you setup EF Portal in non usual path (/opt/nisp) you can use --efp_path=/my/own/path/
+- *--report-only:* Only generate the report without collecting logs.
+- *--collect-logs:* Collect logs and create the report without the interactive menu.
+- *--without-encryption:* Create the compressed file without GPG encryption. The `.tar.gz` will not be encrypted with a passphrase.
+- *--without-upload:* Skip the automatic upload to NI SP. The file is preserved locally so you can upload it manually.
+- *--efp_dir=:* If you setup EF Portal in a non usual path (/opt/nisp) you can use --efp_dir=/my/own/path/
+
+## Produce an unencrypted bundle (for AI Log Analysis)
+
+```bash
+sudo bash Collect-EF-Portal-Logs.sh --collect-logs --without-encryption --without-upload
+```
+
+This creates an unencrypted `efp_logs_collection_<HOSTNAME>.tar.gz` in the current
+directory that you can upload to the AI Log Analysis tool. The bundle now includes a
+`collection_meta.json` manifest for automatic product identification.
