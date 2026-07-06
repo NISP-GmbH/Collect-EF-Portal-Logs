@@ -389,26 +389,19 @@ welcomeMessage()
     echo "This script will collect important logs to help you to find eventual issues with your configuration."
     echo -e "${GREEN}By default the script will not restart any service without your approval. So if you do not agree when asked, this script will collect all logs without touch in any running service.${NC}"
 
+    # Default to collecting + sending the logs (option 2). Option 1 (report
+    # only) is available via the --report-only flag; there is no interactive menu.
     option_selected=""
-    if [[ "$collect_log_only" == "false" && "$report_only" == "false" ]]
+    if [[ "$report_only" == "true" && "$collect_log_only" == "false" ]]
     then
-        echo -e "${GREEN}Select which option do you want to proceed:${NC}"
-        echo -e "${GREEN}(1)${NC} Create a report that will look for common issues"
-        echo -e "${GREEN}(2)${NC} Collect relevant logs to send to NISP Support Team"
-        echo -e "${GREEN}Please type 1 or 2:${NC}"
-        read option_selected
-
-        if ! echo $option_selected | egrep -iq "^(1|2)$"
-        then
-            echo "Option >> $option_selected << invalid. Exiting..."
-            exit 24
-        fi
+        option_selected="1"
     elif [[ "$collect_log_only" == "true" && "$report_only" == "false" ]]
     then
         option_selected="2"
-    elif [[ "$collect_log_only" == "false" && "$report_only" == "true" ]]
+    elif [[ "$collect_log_only" == "false" && "$report_only" == "false" ]]
     then
-        option_selected="1"
+        # By default (no option flags), collect and send the logs.
+        option_selected="2"
     else
         # collect logs will always create the report
         collect_log_only=true
