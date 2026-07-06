@@ -423,51 +423,180 @@ welcomeMessage()
             report_only="true"
         ;;
         2)
-            echo -e "${GREEN}In the end an encrypted file will be created, then it will be securely uploaded to NISP and a notification will be sent to NISP Support Team.${NC}"
-            echo "If you do not have internet acess when executing this script, you will have an option to store the file in the end."
+            # The AI analysis reads the logs, so the uploaded bundle is unencrypted.
+            without_encryption=true
+            echo -e "${GREEN}In the end the logs will be collected into an (unencrypted) compressed file, uploaded to NI SP, and sent to Deep NI SP for an automatic AI log analysis.${NC}"
+            echo "If you do not have internet access when executing this script, the file will be kept locally so you can upload it manually."
 
-            echo "Write any text that will identify you for NISP Support Team. Can be e-mail, name, e-mail subject, company name etc."
-            echo -e "${YELLOW}Note: Identifier is mandatory for upload.${NC}"
-            while true; do
-                read identifier_string
-                # Trim leading/trailing whitespace
-                identifier_string=$(echo "$identifier_string" | xargs)
-                if [[ -n "$identifier_string" ]]; then
-                    break
-                else
-                    echo -e "${RED}Identifier cannot be empty. Please enter a valid identifier:${NC}"
-                fi
-            done
+            # Name, e-mail and a short problem description are mandatory for the
+            # AI analysis request (not needed with --without-upload).
+            if ! $without_upload; then
+                collectSupportDetails
+            fi
         ;;
     esac
 }
 
+# Collect the mandatory contact details for the AI analysis request. Values may
+# be supplied non-interactively via --name / --email / --problem; anything
+# missing is prompted for.
+collectSupportDetails()
+{
+    if [ -z "$support_name" ]; then
+        while true; do
+            echo -e "${YELLOW}[REQUIRED]${NC} Your name or company:"
+            read support_name
+            support_name=$(echo "$support_name" | xargs)
+            [ -n "$support_name" ] && break
+            echo -e "${RED}ERROR: name is mandatory.${NC}"
+        done
+    fi
+
+    if [ -z "$support_email" ]; then
+        while true; do
+            echo -e "${YELLOW}[REQUIRED]${NC} Your e-mail (so NI SP Support can reach you):"
+            read support_email
+            support_email=$(echo "$support_email" | xargs)
+            if [[ "$support_email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then break; fi
+            echo -e "${RED}ERROR: please enter a valid e-mail address.${NC}"
+        done
+    fi
+
+    if [ -z "$support_problem" ]; then
+        while true; do
+            echo -e "${YELLOW}[REQUIRED]${NC} Briefly describe the problem you are seeing:"
+            read support_problem
+            [ -n "$support_problem" ] && break
+            echo -e "${RED}ERROR: a short problem description is mandatory.${NC}"
+        done
+    fi
+
+    echo -e "${GREEN}By continuing, you authorize NI SP to process the (unencrypted) log bundle to generate an AI analysis.${NC}"
+}
+
+# Fallback hint when the automatic upload/analysis can't complete.
+uploadFallbackHint()
+{
+    echo -e "${GREEN}#########################################################################${NC}"
+    echo -e "${GREEN}The log bundle was saved locally as: ${YELLOW}${compressed_file_name}${NC}"
+    echo -e "${GREEN}You can upload it manually to: ${YELLOW}${upload_service_base}/${NC}"
+    echo -e "${GREEN}then use the \"Ask Deep NI SP to analyze these logs\" button, or send the link to NI SP Support.${NC}"
+    echo -e "${GREEN}#########################################################################${NC}"
+}
+
+# Upload a bundle to the NI SP upload service (tus protocol) and request an AI
+# log analysis from Deep NI SP. Prints the private report link on success.
+# Args: <file> <product-key>.
+requestAiAnalysis()
+{
+    local file="$1"
+    local product="$2"
+    local fname fsize fname_b64
+    fname=$(basename "$file")
+    fsize=$(wc -c < "$file" | tr -d ' ')
+    fname_b64=$(printf '%s' "$fname" | base64 | tr -d '\n')
+
+    echo -e "${YELLOW}Uploading the logs to NI SP (${fsize} bytes)...${NC}"
+
+    # 1) tus create — declare the length + filename, receive an upload Location.
+    local create_headers location
+    create_headers=$(curl $curl_proxy_opt -s -D - -o /dev/null -X POST "${upload_service_base}/files/" \
+        -H "Tus-Resumable: 1.0.0" \
+        -H "Upload-Length: ${fsize}" \
+        -H "Upload-Metadata: filename ${fname_b64}")
+    location=$(printf '%s' "$create_headers" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')
+    if [ -z "$location" ]; then
+        echo -e "${RED}Upload failed (could not create the upload session).${NC}"
+        uploadFallbackHint
+        return 1
+    fi
+
+    # 2) tus send bytes — single PATCH of the whole file at offset 0.
+    local patch_status
+    patch_status=$(curl $curl_proxy_opt -s -o /dev/null -w "%{http_code}" -X PATCH "$location" \
+        -H "Tus-Resumable: 1.0.0" \
+        -H "Upload-Offset: 0" \
+        -H "Content-Type: application/offset+octet-stream" \
+        --data-binary "@${file}")
+    if [ "$patch_status" != "204" ]; then
+        echo -e "${RED}Upload failed (HTTP ${patch_status}).${NC}"
+        uploadFallbackHint
+        return 1
+    fi
+
+    # 3) sign — turn the upload id into a signed, time-limited download link.
+    local upload_id sign_json dl_path download_url
+    upload_id="${location##*/}"
+    sign_json=$(curl $curl_proxy_opt -s "${upload_service_base}/sign/${upload_id}")
+    dl_path=$(printf '%s' "$sign_json" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    # PHP's json_encode escapes slashes (\/) — unescape so the URL host parses.
+    dl_path=$(printf '%s' "$dl_path" | sed 's#\\/#/#g')
+    if [ -z "$dl_path" ]; then
+        echo -e "${RED}Upload succeeded but no download link was returned.${NC}"
+        uploadFallbackHint
+        return 1
+    fi
+    download_url="${upload_service_base}${dl_path}"
+
+    # 4) request AI analysis — Deep NI SP queues the job and returns a report link.
+    echo -e "${YELLOW}Requesting AI log analysis...${NC}"
+    local resp result_path err report_url
+    resp=$(curl $curl_proxy_opt -s -X POST "${deep_ai_base}/api/upload" \
+        -F "product=${product}" \
+        -F "problem_description=${support_problem}" \
+        -F "contact_name=${support_name}" \
+        -F "contact_email=${support_email}" \
+        -F "consent=on" \
+        -F "source_url=${download_url}")
+    result_path=$(printf '%s' "$resp" | sed -n 's/.*"result_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [ -z "$result_path" ]; then
+        err=$(printf '%s' "$resp" | sed -n 's/.*"error"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        echo -e "${RED}Could not create the analysis request. ${err}${NC}"
+        uploadFallbackHint
+        return 1
+    fi
+    report_url="${deep_ai_base}${result_path}"
+
+    echo -e "${GREEN}#########################################################################${NC}"
+    echo -e "${GREEN}Your logs were sent to NI SP for AI analysis.${NC}"
+    echo -e "${GREEN}Your report will be ready within ~30 minutes at:${NC}"
+    echo -e "${YELLOW}${report_url}${NC}"
+    echo -e "${GREEN}Bookmark this private link — it is how you and NI SP Support read the result.${NC}"
+    echo -e "${GREEN}#########################################################################${NC}"
+}
+
 uploadLogCollection()
 {
-    echo -e "${GREEN}${BOLD}Securely${NC}${GREEN} uploading the file to NISP Support Team...${NC}"
+    # The AI analysis needs an unencrypted bundle, so we always send the .tar.gz.
+    local upload_file="${compressed_file_name}"
 
-    curl_response=$(curl -s -w "\n%{http_code}" -F "service=efp" -F "identifier=${identifier_string}" -F "file=@${encrypted_file_name}" "${upload_url}")
-    if [ $? -ne 0 ]
+    if $without_upload
     then
-        echo "Failed to upload the file!"
-        exit 23
-    else
-        echo -e "\nUpload successful!"
-        curl_http_body=$(echo $curl_response | cut -d' ' -f1)
-        curl_http_status=$(echo $curl_response | cut -d' ' -f2)
-        curl_filename=$(echo "$curl_http_body" | tr -d '\r\n')
-        curl_response=$(curl -s -w "\n%{http_code}" -X POST --data-urlencode "encrypt_password=${encrypt_password}" --data-urlencode "curl_filename=${curl_filename}" --data-urlencode "identifier_string=${identifier_string}" "$notify_url")
-        if [ $? -ne 0 ]
-        then
-            echo "Failed to notificate the NISP Support Team about the uploaded file. Please send an e-mail."
-        else
-            echo -e "${GREEN}NISP Support Team was notified about the file!${NC}"
-        fi
+        echo -e "${GREEN}#########################################################################${NC}"
+        echo -e "${GREEN}Upload was skipped as requested (--without-upload).${NC}"
+        echo -e "${GREEN}The file was saved locally as: ${YELLOW}${upload_file}${NC}"
+        echo -e "${GREEN}Please upload it manually to: ${YELLOW}${upload_service_base}/${NC}"
+        echo -e "${GREEN}then use the \"Ask Deep NI SP to analyze these logs\" button.${NC}"
+        echo -e "${GREEN}#########################################################################${NC}"
+        return
     fi
+
+    if [ ! -f "${upload_file}" ]; then
+        echo -e "${RED}Archive ${upload_file} not found; cannot send to Support.${NC}"
+        return
+    fi
+
+    requestAiAnalysis "${upload_file}" "${product_key}"
 }
 
 encryptLogCollection()
 {
+    if $without_encryption
+    then
+        echo -e "${GREEN}Skipping encryption as requested (--without-encryption).${NC}"
+        return
+    fi
+
     gpg --symmetric --cipher-algo AES256 --batch --yes --passphrase "${encrypt_password}" --output "${encrypted_file_name}"  "${compressed_file_name}"
 }
 
@@ -584,6 +713,23 @@ checkPackages()
     fi
 }
 
+# Writes a product-identification manifest into the bundle so downstream tools
+# (e.g. the AI Log Analysis service) can reliably detect what this bundle is.
+writeCollectionMeta()
+{
+    local collected_at
+    collected_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    cat > "${temp_dir}/collection_meta.json" <<EOF
+{
+  "product": "efp",
+  "script_version": "${collection_script_version}",
+  "hostname": "${hostname_parsed}",
+  "collected_at_utc": "${collected_at}",
+  "schema": 1
+}
+EOF
+}
+
 compressLogCollection()
 {
     tar czf $compressed_file_name $temp_dir
@@ -591,7 +737,33 @@ compressLogCollection()
 
 removeTempDirs()
 {
-    rm -rf $temp_dir
+    echo "Cleaning temp files..."
+
+    if [ -d "$temp_dir" ]
+    then
+        rm -rf "$temp_dir"
+    fi
+
+    if [ -f "$encrypted_file_name" ]
+    then
+        rm -f "$encrypted_file_name"
+    fi
+
+    # After trying to send to the AI tool, let the user keep the bundle for a
+    # manual upload (same behaviour as the DCV Linux collector).
+    if ! $report_only && ! $without_upload
+    then
+        echo -e "${GREEN}Do you want to delete the ${compressed_file_name}?${NC}"
+        echo "If you have no internet to upload the file, you can manually send to NI SP Support Team."
+        echo -e "You can upload it to ${YELLOW}${upload_service_base}${NC} and share the resulting link with NI SP Support."
+        echo "Write Yes/Y/y. Any other response, or empty response, will be considered as no."
+        read user_answer
+
+        if echo "$user_answer" | egrep -iq "^(y|yes)$"
+        then
+            rm -f "${compressed_file_name}"
+        fi
+    fi
 }
 
 createTempDirs()
@@ -1540,9 +1712,15 @@ compressed_file_name="efp_logs_collection_${hostname_parsed}.tar.gz"
 encrypt_length="32"
 encrypt_password=$(openssl rand -base64 48 | tr -dc '\-A-Za-z0-9@#$%^&*()_=+' | tr -d ' ' | head -c "${encrypt_length}")
 encrypted_file_name="${compressed_file_name}.gpg"
-upload_domain="https://dcv-logs.ni-sp.com"
-upload_url="${upload_domain}/upload.php"
-notify_url="${upload_domain}/notify.php"
+# AI log analysis: upload the (unencrypted) bundle to the NI SP upload service,
+# then request an analysis from Deep NI SP, which returns a private report link.
+upload_service_base="https://ni-sp.com:9443"
+deep_ai_base="https://deep.ni-sp.com"
+product_key="efp"
+support_name=""
+support_email=""
+support_problem=""
+curl_proxy_opt=""
 curl_response=""
 ubuntu_distro="false"
 ubuntu_version=""
@@ -1565,12 +1743,15 @@ ip_test_external="8.8.8.8"
 dns_is_working="false"
 report_only="false"
 collect_log_only="false"
+without_encryption="false"
+without_upload="false"
+collection_script_version="2026.08"
 option_selected="1"
 SCRIPT_MARKER="NISPGMBHHASH$(date +%s)$$"
 
-for arg in "$@"
+while [ $# -gt 0 ]
 do
-    case $arg in
+    case "$1" in
         --force)
             force_flag=true
         ;;
@@ -1580,10 +1761,33 @@ do
         --collect-logs)
             collect_log_only=true
         ;;
+        --without-encryption)
+            without_encryption=true
+        ;;
+        --without-upload)
+            without_upload=true
+        ;;
         --efp_dir=*)
-            efp_dir="${arg#*=}"
+            efp_dir="${1#*=}"
+        ;;
+        --efp_dir)
+            shift
+            efp_dir="$1"
+        ;;
+        --name)
+            shift
+            support_name="$1"
+        ;;
+        --email)
+            shift
+            support_email="$1"
+        ;;
+        --problem)
+            shift
+            support_problem="$1"
         ;;
     esac
+    shift
 done
 
 main()
@@ -1618,6 +1822,7 @@ main()
     fi
 
     # Otherwise, proceed with compressing and uploading the logs.
+    writeCollectionMeta
     compressLogCollection
     encryptLogCollection
     uploadLogCollection
