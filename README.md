@@ -5,7 +5,7 @@ This script was created to help you collect all relevant logs to troubleshoot an
 How to execute:
 
 ```bash
-wget --no-check-certificate -qO- /tmp/Collect-EF-Portal-Logs.sh https://raw.githubusercontent.com/NISP-GmbH/Collect-EF-Portal-Logs/main/Collect-EF-Portal-Logs.sh)" && sudo bash /tmp/Collect-EF-Portal-Logs.sh
+wget --no-check-certificate -qO- /tmp/Collect-EF-Portal-Logs.sh https://raw.githubusercontent.com/NISP-GmbH/Collect-EF-Portal-Logs/main/Collect-EF-Portal-Logs.sh && sudo bash /tmp/Collect-EF-Portal-Logs.sh
 
 ```
 
