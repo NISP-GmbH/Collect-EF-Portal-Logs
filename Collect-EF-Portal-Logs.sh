@@ -488,6 +488,10 @@ requestAiAnalysis()
     fname=$(basename "$file")
     fsize=$(wc -c < "$file" | tr -d ' ')
     fname_b64=$(printf '%s' "$fname" | base64 | tr -d '\n')
+    # Tag the upload with the product so the upload service does NOT post its own
+    # Slack card — Deep NI SP announces this bundle when the analysis finishes.
+    local product_b64
+    product_b64=$(printf '%s' "$product" | base64 | tr -d '\n')
 
     echo -e "${YELLOW}Uploading the logs to NI SP (${fsize} bytes)...${NC}"
 
@@ -496,7 +500,7 @@ requestAiAnalysis()
     create_headers=$(curl $curl_proxy_opt -s -D - -o /dev/null -X POST "${upload_service_base}/files/" \
         -H "Tus-Resumable: 1.0.0" \
         -H "Upload-Length: ${fsize}" \
-        -H "Upload-Metadata: filename ${fname_b64}")
+        -H "Upload-Metadata: filename ${fname_b64},product ${product_b64}")
     location=$(printf '%s' "$create_headers" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')
     if [ -z "$location" ]; then
         echo -e "${RED}Upload failed (could not create the upload session).${NC}"
