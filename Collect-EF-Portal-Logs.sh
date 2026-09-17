@@ -41,7 +41,7 @@ safeLogCheck()
 
     elif [ -d "$target" ]
     then
-        local results=$(egrep -Ri "$pattern" "$target" 2>/dev/null | \
+        local results=$(grep -ERi "$pattern" "$target" 2>/dev/null | \
                        grep -vE "($$|wget|bash.*Collect|curl|${SCRIPT_MARKER})" | \
                        grep -v "$(basename $0)")
     else
@@ -313,7 +313,7 @@ EOF
     if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
     then
         local unique_id="log_block_$(date +%s%N)"
-        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g')
+        local log_content=$(grep -ERi "${string_pattern}" "${target_dir}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g')
         if [ -n "$log_content" ]
         then
             cat << EOF >> ${efp_report_dir_path}/html_${message_type}
@@ -375,7 +375,7 @@ reportMessageWrite()
 
     if [[ "${target_dir}" != "null" && "${string_pattern}" != "null" && -n "${target_dir}" && -n "${string_pattern}" ]]
     then
-        local log_content=$(egrep -Ri "${string_pattern}" "${target_dir}" 2>/dev/null)
+        local log_content=$(grep -ERi "${string_pattern}" "${target_dir}" 2>/dev/null)
         if [ -n "$log_content" ]
         then
             echo -e "\n--- Found Patterns Log ---" | tee -a $log_file > /dev/null
@@ -617,14 +617,14 @@ checkLinuxDistro()
         if [ -f /etc/redhat-release ]
         then
             release_info=$(cat /etc/redhat-release)
-            if echo $release_info | egrep -iq "(centos|almalinux|rocky|red hat|redhat)"
+            if echo $release_info | grep -Eiq "(centos|almalinux|rocky|red hat|redhat)"
             then
                 redhat_distro_based="true"
             fi
 
             if [[ "${redhat_distro_based}" == "true" ]]
             then
-                if echo "$release_info" | egrep -iq stream
+                if echo "$release_info" | grep -Eiq stream
                 then
                     redhat_distro_based_version=$(cat /etc/redhat-release  |  grep -oE '[0-9]+')
                 else
@@ -647,7 +647,7 @@ checkLinuxDistro()
         else
             if [ -f /etc/debian_version ]
             then
-                if cat /etc/issue | egrep -iq "ubuntu"
+                if cat /etc/issue | grep -Eiq "ubuntu"
                 then
                     ubuntu_distro="true"
                     ubuntu_version=$(lsb_release -rs)
@@ -756,7 +756,7 @@ removeTempDirs()
         echo "Write Yes/Y/y. Any other response, or empty response, will be considered as no."
         read user_answer
 
-        if echo "$user_answer" | egrep -iq "^(y|yes)$"
+        if echo "$user_answer" | grep -Eiq "^(y|yes)$"
         then
             rm -f "${compressed_file_name}"
         fi
@@ -960,7 +960,7 @@ getSssdData()
         fi
 	fi
 
-    detect_sssd=$(sudo ps aux | egrep -i '[s]ssd')
+    detect_sssd=$(sudo ps aux | grep -Ei '[s]ssd')
     if [[ "${detect_sssd}x" != "x" ]]
     then
         echo "$detect_sssd" > $temp_dir/warnings/sssd_is_running
@@ -976,7 +976,7 @@ getSssdData()
     warning_file_name="sssd_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
     
         reportMessage \ 
         "critical" \
@@ -1261,17 +1261,17 @@ getOsData()
 
     if [ -f $target_dir/dmesg ]
     then
-        if egrep -iq "oom" $target_dir/dmesg > /dev/null 2>&1
+        if grep -Eiq "oom" $target_dir/dmesg > /dev/null 2>&1
         then
-            cat $target_dir/dmesg | egrep -i "(oom|killed)" > ${temp_dir}/warnings/oom_killer_log_found_dmesg
+            cat $target_dir/dmesg | grep -Ei "(oom|killed)" > ${temp_dir}/warnings/oom_killer_log_found_dmesg
         fi
     fi
 
     if [ -f $target_dir/messages ]
     then
-        if egrep -iq "oom" $target_dir/messages > /dev/null 2>&1
+        if grep -Eiq "oom" $target_dir/messages > /dev/null 2>&1
         then
-            cat $target_dir/messages | egrep -i "(oom|killed)" > ${temp_dir}/warnings/oom_killer_log_found_messages
+            cat $target_dir/messages | grep -Ei "(oom|killed)" > ${temp_dir}/warnings/oom_killer_log_found_messages
         fi
     fi
 
@@ -1299,7 +1299,7 @@ getEfpData()
 
     if [ -d ${efp_dir}/enginframe/ ]
     then
-        for efp_version in $(ls ${efp_dir}/enginframe/ | egrep -i "202[0-9]{1}" )
+        for efp_version in $(ls ${efp_dir}/enginframe/ | grep -Ei "202[0-9]{1}" )
         do
 			if [ -d "${efp_dir}/enginframe/${efp_version}" ]
 			then
@@ -1326,7 +1326,7 @@ getEfpData()
 	then
 	    if [ -f $efportal_install_config ]
 	    then
-	        cat $efportal_install_config | egrep -i "pam.user" >> $target_dir/pam_user
+	        cat $efportal_install_config | grep -Ei "pam.user" >> $target_dir/pam_user
 	    fi
 	fi
 
@@ -1335,10 +1335,10 @@ getEfpData()
 	then
 	    if [ -f $efportal_install_log ]
 	    then
-	        cat $efportal_install_log | egrep -i "no such file" >> $target_dir/efp_installer_log_no_such_file
-	        cat $efportal_install_log | egrep -i "erro" >> $target_dir/efp_installer_log_erro_messages
-	        cat $efportal_install_log | egrep -i "fail" >> $target_dir/efp_installer_log_fail_messages
-	        cat $efportal_install_log | egrep -i "exit" >> $target_dir/efp_installer_log_exit_messages
+	        cat $efportal_install_log | grep -Ei "no such file" >> $target_dir/efp_installer_log_no_such_file
+	        cat $efportal_install_log | grep -Ei "erro" >> $target_dir/efp_installer_log_erro_messages
+	        cat $efportal_install_log | grep -Ei "fail" >> $target_dir/efp_installer_log_fail_messages
+	        cat $efportal_install_log | grep -Ei "exit" >> $target_dir/efp_installer_log_exit_messages
 	    fi
 	fi
 
@@ -1376,7 +1376,7 @@ getEfpData()
     warning_file_name="connection_refused"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        count_string_pattern=$(grep -ERic "${string_pattern}" ${target_dir}/logs_main/*)
         reportMessage \
         "critical" \
         "Identified >>> $count_string_pattern <<< messages about connection refused." \
@@ -1400,7 +1400,7 @@ getEfpData()
     warning_file_name="csrf_token_does_not_match"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        count_string_pattern=$(egrep -Ric "${string_pattern}" ${target_dir}/logs_main/*)
+        count_string_pattern=$(grep -ERic "${string_pattern}" ${target_dir}/logs_main/*)
         reportMessage \
         "warning" \
         "Identified >>> $count_string_pattern <<< messages about CSRF Token not matching with the session token." \
@@ -1424,7 +1424,7 @@ getEfpData()
     warning_file_name="SMClient_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
     
         reportMessage \
         "critical" \
@@ -1449,7 +1449,7 @@ getEfpData()
     warning_file_name="efp_dcvsm_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1474,7 +1474,7 @@ getEfpData()
     warning_file_name="efp_db_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1499,7 +1499,7 @@ getEfpData()
     warning_file_name="efp_dcvsm_cluster"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1524,7 +1524,7 @@ getEfpData()
     warning_file_name="slurm_jobs_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1549,7 +1549,7 @@ getEfpData()
     warning_file_name="efp_syntax_errors"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1574,7 +1574,7 @@ getEfpData()
     warning_file_name="efp_unable_to_get_host_list_for_cluster"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
@@ -1599,7 +1599,7 @@ getEfpData()
     warning_file_name="efp_io_error_while_submitting_job"
     if safeLogCheck "${string_pattern}" "${target_dir}"
     then
-        egrep -Ri "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
+        grep -ERi "${string_pattern}" ${target_dir}/* >> ${temp_dir}/warnings/${warning_file_name}
 
         reportMessage \
         "critical" \
