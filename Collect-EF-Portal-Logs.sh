@@ -435,11 +435,26 @@ welcomeMessage()
 # missing is prompted for.
 collectSupportDetails()
 {
+    if [ -n "$support_email" ] && [[ ! "$support_email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]
+    then
+        echo -e "${RED}ERROR: >> $support_email << is not a valid e-mail address.${NC}"
+        support_email=""
+    fi
+
+    # Without a terminal (cron, Ansible, SSM...) read hits EOF and the prompts
+    # below would loop forever, so fail with a hint instead
+    if [ ! -t 0 ] && { [ -z "$support_name" ] || [ -z "$support_email" ] || [ -z "$support_problem" ]; }
+    then
+        echo -e "${RED}ERROR: no terminal to ask for your contact details.${NC}"
+        echo "Pass --name, --email and --problem, or use --without-upload to keep the logs locally."
+        exit 1
+    fi
+
     if [ -z "$support_name" ]; then
         while true; do
             echo -e "${YELLOW}[REQUIRED]${NC} Your name or company:"
-            read support_name
-            support_name=$(echo "$support_name" | xargs)
+            read -r support_name || exit 1
+            support_name=$(trimSpaces "$support_name")
             [ -n "$support_name" ] && break
             echo -e "${RED}ERROR: name is mandatory.${NC}"
         done
@@ -448,8 +463,8 @@ collectSupportDetails()
     if [ -z "$support_email" ]; then
         while true; do
             echo -e "${YELLOW}[REQUIRED]${NC} Your e-mail (so NI SP Support can reach you):"
-            read support_email
-            support_email=$(echo "$support_email" | xargs)
+            read -r support_email || exit 1
+            support_email=$(trimSpaces "$support_email")
             if [[ "$support_email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then break; fi
             echo -e "${RED}ERROR: please enter a valid e-mail address.${NC}"
         done
@@ -458,13 +473,23 @@ collectSupportDetails()
     if [ -z "$support_problem" ]; then
         while true; do
             echo -e "${YELLOW}[REQUIRED]${NC} Briefly describe the problem you are seeing:"
-            read support_problem
+            read -r support_problem || exit 1
             [ -n "$support_problem" ] && break
             echo -e "${RED}ERROR: a short problem description is mandatory.${NC}"
         done
     fi
 
     echo -e "${GREEN}By continuing, you authorize NI SP to process the (unencrypted) log bundle to generate an AI analysis.${NC}"
+}
+
+# Strip leading/trailing whitespace (xargs did this before, but chokes on quotes
+# such as O'Brien).
+trimSpaces()
+{
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
 }
 
 # Fallback hint when the automatic upload/analysis can't complete.
@@ -492,15 +517,26 @@ requestAiAnalysis()
     # Slack card — Deep NI SP announces this bundle when the analysis finishes.
     local product_b64
     product_b64=$(printf '%s' "$product" | base64 | tr -d '\n')
+    # E-mail, problem and consent go into the upload's .info sidecar so the NI SP
+    # upload admin shows who sent the bundle. The problem is capped at 300 bytes;
+    # iconv drops a multibyte char split by the cut (plain cut if iconv is absent).
+    local metadata desc_b64
+    metadata="filename ${fname_b64},product ${product_b64},consent $(printf '1' | base64)"
+    metadata+=",email $(printf '%s' "$support_email" | base64 | tr -d '\n')"
+    if [ -n "$support_problem" ]; then
+        desc_b64=$(printf '%s' "$support_problem" | head -c 300 \
+            | { iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || cat; } | base64 | tr -d '\n')
+        metadata+=",description ${desc_b64}"
+    fi
 
     echo -e "${YELLOW}Uploading the logs to NI SP (${fsize} bytes)...${NC}"
 
-    # 1) tus create — declare the length + filename, receive an upload Location.
+    # 1) tus create — declare the length + metadata, receive an upload Location.
     local create_headers location
     create_headers=$(curl $curl_proxy_opt -s -D - -o /dev/null -X POST "${upload_service_base}/files/" \
         -H "Tus-Resumable: 1.0.0" \
         -H "Upload-Length: ${fsize}" \
-        -H "Upload-Metadata: filename ${fname_b64},product ${product_b64}")
+        -H "Upload-Metadata: ${metadata}")
     location=$(printf '%s' "$create_headers" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')
     if [ -z "$location" ]; then
         echo -e "${RED}Upload failed (could not create the upload session).${NC}"

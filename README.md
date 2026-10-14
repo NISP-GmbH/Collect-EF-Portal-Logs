@@ -19,6 +19,14 @@ __Important:__ The script will not stop/start or touch any service without your 
 - *--without-encryption:* Create the compressed file without GPG encryption. The `.tar.gz` will not be encrypted with a passphrase.
 - *--without-upload:* Skip the automatic upload to NI SP. The file is preserved locally so you can upload it manually.
 - *--efp_dir=:* If you setup EF Portal in a non usual path (/opt/nisp) you can use --efp_dir=/my/own/path/
+- *--name "text":* Your name or company, sent with the AI analysis request.
+- *--email "addr":* Your e-mail, so NI SP Support can reach you.
+- *--problem "text":* Short description of the problem you are seeing.
+
+`--name`, `--email` and `--problem` are mandatory unless `--without-upload` is used. They are asked
+interactively when missing; without a terminal (cron, Ansible, SSM...) the script stops with an error
+instead. They go to Deep NI SP with the analysis request and are also stored with the upload on
+NI SP's upload service, so NI SP Support can see who sent the bundle.
 
 ## Produce an unencrypted bundle (for AI Log Analysis)
 
