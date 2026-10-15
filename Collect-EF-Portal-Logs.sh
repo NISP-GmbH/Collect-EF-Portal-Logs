@@ -418,7 +418,7 @@ welcomeMessage()
         2)
             # The AI analysis reads the logs, so the uploaded bundle is unencrypted.
             without_encryption=true
-            echo -e "${GREEN}In the end the logs will be collected into an (unencrypted) compressed file, uploaded to NI SP, and sent to Deep NI SP for an automatic AI log analysis.${NC}"
+            echo -e "${GREEN}In the end the logs will be collected into an (unencrypted) compressed file, uploaded to NI SP and, if you agree, sent to Deep NI SP for an automatic log analysis.${NC}"
             echo "If you do not have internet access when executing this script, the file will be kept locally so you can upload it manually."
 
             # Name, e-mail and a short problem description are mandatory for the
@@ -479,7 +479,26 @@ collectSupportDetails()
         done
     fi
 
-    echo -e "${GREEN}By continuing, you authorize NI SP to process the (unencrypted) log bundle to generate an AI analysis.${NC}"
+    # Ask before handing the bundle to Deep NI SP. Without a terminal there is no
+    # one to ask, so the analysis stays on unless --without-analysis was given.
+    if $send_to_analysis && [ -t 0 ]; then
+        local answer
+        while true; do
+            echo -e "${YELLOW}[QUESTION]${NC} Send the logs to Deep NI SP for an automatic analysis? You get a private report link. (Y/n)"
+            read -r answer || exit 1
+            case "$answer" in
+                ""|[Yy]|[Yy][Ee][Ss]) break ;;
+                [Nn]|[Nn][Oo]) send_to_analysis=false; break ;;
+            esac
+            echo -e "${RED}ERROR: please answer y or n.${NC}"
+        done
+    fi
+
+    if $send_to_analysis; then
+        echo -e "${GREEN}By continuing, you authorize NI SP to process the (unencrypted) log bundle to generate an automatic analysis.${NC}"
+    else
+        echo -e "${GREEN}By continuing, you authorize NI SP to store the (unencrypted) log bundle for support. It will be uploaded without an automatic analysis.${NC}"
+    fi
 }
 
 # Strip leading/trailing whitespace (xargs did this before, but chokes on quotes
@@ -515,13 +534,17 @@ requestAiAnalysis()
     fname_b64=$(printf '%s' "$fname" | base64 | tr -d '\n')
     # Tag the upload with the product so the upload service does NOT post its own
     # Slack card — Deep NI SP announces this bundle when the analysis finishes.
-    local product_b64
-    product_b64=$(printf '%s' "$product" | base64 | tr -d '\n')
+    # Without the analysis the upload stays untagged, so NI SP Support still gets
+    # the upload service's card.
+    local product_meta=""
+    if $send_to_analysis; then
+        product_meta=",product $(printf '%s' "$product" | base64 | tr -d '\n')"
+    fi
     # E-mail, problem and consent go into the upload's .info sidecar so the NI SP
     # upload admin shows who sent the bundle. The problem is capped at 300 bytes;
     # iconv drops a multibyte char split by the cut (plain cut if iconv is absent).
     local metadata desc_b64
-    metadata="filename ${fname_b64},product ${product_b64},consent $(printf '1' | base64)"
+    metadata="filename ${fname_b64}${product_meta},consent $(printf '1' | base64)"
     metadata+=",email $(printf '%s' "$support_email" | base64 | tr -d '\n')"
     if [ -n "$support_problem" ]; then
         desc_b64=$(printf '%s' "$support_problem" | head -c 300 \
@@ -571,8 +594,17 @@ requestAiAnalysis()
     fi
     download_url="${upload_service_base}${dl_path}"
 
-    # 4) request AI analysis — Deep NI SP queues the job and returns a report link.
-    echo -e "${YELLOW}Requesting AI log analysis...${NC}"
+    if ! $send_to_analysis; then
+        echo -e "${GREEN}#########################################################################${NC}"
+        echo -e "${GREEN}Your logs were uploaded to NI SP and NI SP Support was notified.${NC}"
+        echo -e "${GREEN}Download link (expires in 7 days):${NC}"
+        echo -e "${YELLOW}${download_url}${NC}"
+        echo -e "${GREEN}#########################################################################${NC}"
+        return 0
+    fi
+
+    # 4) request the analysis — Deep NI SP queues the job and returns a report link.
+    echo -e "${YELLOW}Requesting automatic log analysis...${NC}"
     local resp result_path err report_url
     resp=$(curl $curl_proxy_opt -s -X POST "${deep_ai_base}/api/upload" \
         -F "product=${product}" \
@@ -591,7 +623,7 @@ requestAiAnalysis()
     report_url="${deep_ai_base}${result_path}"
 
     echo -e "${GREEN}#########################################################################${NC}"
-    echo -e "${GREEN}Your logs were sent to NI SP for AI analysis.${NC}"
+    echo -e "${GREEN}Your logs were sent to NI SP for automatic analysis.${NC}"
     echo -e "${GREEN}Your report will be ready within ~30 minutes at:${NC}"
     echo -e "${YELLOW}${report_url}${NC}"
     echo -e "${GREEN}Bookmark this private link — it is how you and NI SP Support read the result.${NC}"
@@ -1753,6 +1785,7 @@ product_key="efp"
 support_name=""
 support_email=""
 support_problem=""
+send_to_analysis="true"
 curl_proxy_opt=""
 curl_response=""
 ubuntu_distro="false"
@@ -1818,6 +1851,9 @@ do
         --problem)
             shift
             support_problem="$1"
+        ;;
+        --without-analysis)
+            send_to_analysis=false
         ;;
     esac
     shift
